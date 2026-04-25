@@ -1,11 +1,18 @@
-export async function getAccounts() {
-  return [
-    { id: 1, code: "1", name: "Tài sản", parentId: null, level: 1, type: "Tài sản", nature: "Nợ", active: true },
-    { id: 2, code: "11", name: "Tiền", parentId: 1, level: 2, type: "Tài sản", nature: "Nợ", active: true },
-    { id: 3, code: "111", name: "Tiền mặt", parentId: 2, level: 3, type: "Tài sản", nature: "Nợ", active: true },
+import axios from 'axios';
 
-    { id: 4, code: "131", name: "Phải thu KH", parentId: 1, level: 2, type: "Công nợ", nature: "Có", active: true },
+const BASE_URL = '/api/v1/master-data';
 
-    { id: 5, code: "338", name: "Phải trả", parentId: null, level: 1, type: "Công nợ", nature: "Có", active: false }
-  ]
-}
+export const MasterDataService = {
+  // Lấy danh sách kèm phân trang & tìm kiếm
+  getAll(params) {
+    return axios.get(`${BASE_URL}`, { params });
+  },
+  // Lưu mới hoặc cập nhật
+  save(data) {
+    return data.Id ? axios.put(`${BASE_URL}/${data.Id}`, data) : axios.post(BASE_URL, data);
+  },
+  // Xóa đối tượng
+  delete(id) {
+    return axios.delete(`${BASE_URL}/${id}`);
+  }
+};

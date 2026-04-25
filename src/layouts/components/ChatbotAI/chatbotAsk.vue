@@ -5,6 +5,9 @@ import axios from 'axios'
 
 const isLoading = ref(false)
 
+// Thiết lập timeout 4 phút cho tất cả các request dùng axios
+axios.defaults.timeout = 240000;
+
 // Emit sự kiện để báo cho component Cha biết khi cần thu nhỏ hoặc đóng hẳn
 const emit = defineEmits(['hide', 'close'])
 

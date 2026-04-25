@@ -58,8 +58,7 @@ const isVoucherOpen = ref(isVoucherRoute.value);
             </router-link>
 
             <router-link to="/voucher" v-if="hasRole(['Admin', 'Accountant'])" class="menu-item has-submenu"
-                @click="isVoucherOpen = !isVoucherOpen" 
-                :class="{ 'active': isVoucherOpen || isVoucherRoute }">
+                @click="isVoucherOpen = !isVoucherOpen" :class="{ 'active': isVoucherOpen || isVoucherRoute }">
                 <span class="icon">🗃️</span>
                 <span v-if="!isCollapse" class="menu-text">Chứng từ</span>
                 <span v-if="!isCollapse" class="arrow" :class="{ 'open': isVoucherOpen }">›</span>
@@ -101,8 +100,8 @@ const isVoucherOpen = ref(isVoucherRoute.value);
                 <span v-if="!isCollapse" class="arrow"></span>
             </router-link>
 
-            <router-link v-if="hasRole(['Admin'])" to="/permission" class="menu-item" 
-                exact-active-class="active" @click="isVoucherOpen = false">
+            <router-link v-if="hasRole(['Admin'])" to="/permission" class="menu-item" exact-active-class="active"
+                @click="isVoucherOpen = false">
                 <span>⚙️</span>
                 <span v-if="!isCollapse">Phân quyền</span>
                 <span v-if="!isCollapse" class="arrow"></span>
@@ -147,8 +146,14 @@ const isVoucherOpen = ref(isVoucherRoute.value);
     z-index: 1000;
 }
 
-.sidebar.collapse { width: 80px; margin-right: 20px; }
-.sidebar-header { margin-bottom: 20px; }
+.sidebar.collapse {
+    width: 80px;
+    margin-right: 20px;
+}
+
+.sidebar-header {
+    margin-bottom: 20px;
+}
 
 .user-badge {
     font-size: 12px;
@@ -167,7 +172,10 @@ const isVoucherOpen = ref(isVoucherRoute.value);
     gap: 6px;
     overflow-y: auto;
 }
-.menu::-webkit-scrollbar { width: 0px; }
+
+.menu::-webkit-scrollbar {
+    width: 0px;
+}
 
 .menu-item {
     display: flex;
@@ -202,6 +210,7 @@ const isVoucherOpen = ref(isVoucherRoute.value);
     transition: transform 0.3s ease;
     font-size: 18px;
 }
+
 .arrow.open {
     transform: rotate(90deg);
 }
@@ -210,9 +219,9 @@ const isVoucherOpen = ref(isVoucherRoute.value);
    CSS CHO SUB-MENU (MENU CON)
    ================================== */
 .submenu-container {
-    
-    background-color: transparent; 
-    margin: 4px 0 10px 12px; 
+
+    background-color: transparent;
+    margin: 4px 0 10px 12px;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -227,7 +236,7 @@ const isVoucherOpen = ref(isVoucherRoute.value);
     text-decoration: none;
     font-size: 14px;
     transition: all 0.2s;
-    border-radius: 10px; 
+    border-radius: 10px;
 }
 
 .submenu-item .dot {
@@ -246,15 +255,16 @@ const isVoucherOpen = ref(isVoucherRoute.value);
 
 
 .submenu-item.active {
-    background-color: #ffffff; 
+    background-color: #ffffff;
     color: #4f46e5;
     font-weight: 700;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); 
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .submenu-item.active .dot {
     background-color: #4f46e5;
-    transform: scale(1.3); /* Chấm tròn to lên xíu khi được chọn */
+    transform: scale(1.3);
+    /* Chấm tròn to lên xíu khi được chọn */
 }
 
 /* ==================================
@@ -277,13 +287,45 @@ const isVoucherOpen = ref(isVoucherRoute.value);
     border-radius: 14px;
 }
 
-.switch { position: relative; width: 40px; height: 20px; cursor: pointer; }
-.switch input { display: none; }
-.slider { position: absolute; background: #cbd5e1; border-radius: 20px; top: 0; bottom: 0; left: 0; right: 0; }
-.slider:before { content: ""; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; }
-input:checked+.slider:before { transform: translateX(20px); }
+.switch {
+    position: relative;
+    width: 40px;
+    height: 20px;
+    cursor: pointer;
+}
 
-.logout, .collapse-btn {
+.switch input {
+    display: none;
+}
+
+.slider {
+    position: absolute;
+    background: #cbd5e1;
+    border-radius: 20px;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+.slider:before {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: 0.3s;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+}
+
+.logout,
+.collapse-btn {
     padding: 12px;
     background: rgba(255, 255, 255, 0.4);
     border-radius: 14px;
@@ -293,5 +335,9 @@ input:checked+.slider:before { transform: translateX(20px); }
     gap: 10px;
     transition: 0.2s;
 }
-.logout:hover { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+.logout:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
 </style>

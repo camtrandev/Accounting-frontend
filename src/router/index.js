@@ -125,7 +125,34 @@ const routes = [
           //   component: () => import('../modules/reports/pages/InventorySummaryReport.vue')
           // }
         ]
-      }
+      },
+      
+      // THÊM ROUTE PHÂN QUYỀN VÀO ĐÂY
+      {
+        path: 'permission',
+        name: 'Permission',
+        component: () => import('@/modules/auth/pages/Permission.vue'), // Bạn hãy tạo file này
+        meta: { requiresAuth: true, role: 'Admin' } // Chỉ Admin mới vào được
+      },
+
+      {
+        path: '/ledger',
+        
+        children: [
+          {
+            path: '',
+            name: 'LedgerPage',
+            component: () => import('../modules/ledger/pages/LedgerPage.vue')
+          }
+          // Sau này nếu có làm trang chi tiết cho từng sổ cái , bạn sẽ thêm vào đây.
+          // Ví dụ:
+          // {
+          //   path: 'inventory-summary',
+          //   name: 'ReportInventorySummary',
+          //   component: () => import('../modules/reports/pages/InventorySummaryReport.vue')
+          // }
+        ]
+      },
 
     ]
   },

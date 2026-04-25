@@ -28,47 +28,44 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isLoggedIn: (state) => !!state.token,
-    // Lấy RoleName đã được giải mã
+    // Trả về role, nếu không có thì mặc định là Viewer
     userRole: (state) => state.user?.role || 'Viewer', 
   },
 
   actions: {
     async login(username, password) {
       try {
-        // 1. Gọi API thẳng từ đây
         const response = await axios.post(API_URL + 'login', { username, password });
-        
-        // Dữ liệu Backend trả về nằm trong response.data
         const responseData = response.data;
 
-        // 2. Map đúng cấu trúc Backend của bạn: responseData.data.token
-        if (responseData.success && responseData.data && responseData.data.token) {
-            const token = responseData.data.token;
-            
-            // 3. Giải mã JWT để lấy Username và Role (Claims từ .NET)
-            const decodedToken = parseJwt(token);
-            
-            const userInfo = {
-                username: decodedToken['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'],
-                role: decodedToken['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'],
-                userId: decodedToken['UserId']
-            };
+        if (responseData.success && responseData.data?.token) {
+          const token = responseData.data.token;
+          const decodedToken = parseJwt(token);
+          
+          // Debug xem decodedToken có gì nếu bạn chưa chắc chắn các key
+          // console.log('Decoded JWT:', decodedToken);
 
-            // 4. Lưu State
-            this.token = token;
-            this.user = userInfo;
+          const userInfo = {
+            // Sử dụng Optional Chaining để tránh crash nếu key không tồn tại
+            username: decodedToken?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'],
+            role: decodedToken?.['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'],
+            userId: decodedToken?.['UserId'] || decodedToken?.['nameid'] // Thường .NET dùng nameid cho UserId
+          };
 
-            // 5. Lưu LocalStorage
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(userInfo));
+          this.token = token;
+          this.user = userInfo;
 
-            return true;
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(userInfo));
+
+          return true;
         } else {
-            throw new Error("Dữ liệu trả về không hợp lệ!");
+          throw new Error(responseData.message || "Đăng nhập thất bại!");
         }
       } catch (error) {
-        this.logout();
-        throw error; // Ném lỗi ra để Login.vue bắt và báo đỏ
+        // Nếu lỗi 401 hoặc lỗi kết nối, đừng logout ngay lập tức nếu đang ở trang login
+        // Chỉ cần throw error để UI hiển thị thông báo
+        throw error;
       }
     },
 
@@ -77,6 +74,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = null;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      // Có thể thêm: router.push('/login') nếu bạn muốn logout cứng từ store
     }
   }
 });
