@@ -1,249 +1,206 @@
 <template>
     <div class="permission-container">
         <div class="header-page">
-            <h1>Trang Quản Lý Phân Quyền</h1>
-            <p class="subtitle">Thiết lập quyền truy cập cho từng vai trò trong hệ thống</p>
+            <h1>Hệ thống tài khoản người dùng</h1>
+            <button class="btn-add-small" @click="openAddModal">
+                <i class="fas fa-plus"></i> Thêm mới
+            </button>
         </div>
 
-        <div class="main-content">
-            <div class="role-sidebar">
-                <div class="sidebar-header">
-                    <span>Vai trò người dùng</span>
-                    <button class="btn-add" @click="addNewRole">+</button>
-                </div>
-                <ul class="role-list">
-                    <li v-for="role in roles" :key="role.id" :class="{ active: selectedRole?.id === role.id }"
-                        @click="selectRole(role)">
-                        <i class="fas fa-user-shield"></i>
-                        {{ role.name }}
-                    </li>
-                </ul>
-            </div>
-
-            <div class="permission-table-container">
-                <div v-if="selectedRole" class="table-card">
-                    <div class="table-header">
-                        <h3>Quyền hạn của: <span class="role-name">{{ selectedRole.name }}</span></h3>
-                        <button class="btn-save" @click="savePermissions">Lưu thay đổi</button>
-                    </div>
-
-                    <table class="permission-table">
-                        <thead>
-                            <tr>
-                                <th>Chức năng hệ thống</th>
-                                <th>Xem</th>
-                                <th>Thêm</th>
-                                <th>Sửa</th>
-                                <th>Xóa</th>
-                                <th>Duyệt/In</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="feature in features" :key="feature.key">
-                                <td class="feature-name">
-                                    <strong>{{ feature.name }}</strong>
-                                </td>
-                                <td v-for="action in actions" :key="action">
-                                    <input type="checkbox" v-model="permissions[selectedRole.id][feature.key][action]">
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div v-else class="empty-state">
-                    <p>Vui lòng chọn một vai trò để thiết lập quyền hạn</p>
-                </div>
+        <div class="filter-section">
+            <div class="search-wrapper">
+                <input type="text" v-model="searchQuery" placeholder="Tìm tên hoặc email..." />
+                <i class="fas fa-search search-icon"></i>
             </div>
         </div>
+
+        <UserTable :users="filteredUsers" @edit="openEditModal" @delete="openDeleteModal" />
+
+        <div class="table-footer">
+            <div class="total-count">Tổng số: <strong>{{ filteredUsers.length }}</strong> người dùng</div>
+        </div>
+
+        <UserFormModal :is-open="formModal.isOpen" :is-edit="formModal.isEdit" :user-data="formModal.data"
+            @close="formModal.isOpen = false" @submit="handleFormSubmit" />
+
+        <ConfirmDeleteModal :is-open="deleteModal.isOpen" :user-name="deleteModal.data?.fullName"
+            @close="deleteModal.isOpen = false" @confirm="handleDelete" />
     </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import axios from 'axios';
+import UserTable from '../components/UserTable.vue';
+import UserFormModal from '../components/UserFormModal.vue';
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal.vue';
 
-// Giả lập danh sách vai trò
-const roles = ref([
-    { id: 1, name: 'Quản trị viên (Admin)' },
-    { id: 2, name: 'Kế toán trưởng' },
-    { id: 3, name: 'Kế toán tổng hợp' },
-    { id: 4, name: 'Nhân viên kho' }
-]);
+// --- Cấu hình API URL ---
+const API_URL = "https://localhost:7047/api/User";
 
-// Danh sách các module chức năng khớp với sidebar của bạn
-const features = [
-    { key: 'dashboard', name: 'Bảng điều khiển (Dashboard)' },
-    { key: 'category', name: 'Danh mục (Khách hàng, NCC, Vật tư)' },
-    { key: 'voucher', name: 'Chứng từ (Thu, Chi, Nhập, Xuất)' },
-    { key: 'ledger', name: 'Sổ cái (Báo cáo tài chính)' },
-    { key: 'inventory', name: 'Kho (Tồn kho, Kiểm kê)' },
-    { key: 'report', name: 'Báo cáo quản trị' }
-];
+// --- State ---
+const users = ref([]);
+const searchQuery = ref('');
 
-const actions = ['view', 'create', 'edit', 'delete', 'approve'];
+// State quản lý Modals
+const formModal = ref({ isOpen: false, isEdit: false, data: null });
+const deleteModal = ref({ isOpen: false, data: null });
 
-const selectedRole = ref(null);
+// --- Actions (API) ---
 
-// Khởi tạo object lưu trữ quyền (Thực tế sẽ lấy từ API)
-// Cấu trúc: { roleId: { featureKey: { view: true, create: false, ... } } }
-const permissions = reactive({
-    1: { // Admin mặc định full quyền
-        dashboard: { view: true, create: true, edit: true, delete: true, approve: true },
-        category: { view: true, create: true, edit: true, delete: true, approve: true },
-        voucher: { view: true, create: true, edit: true, delete: true, approve: true },
-        ledger: { view: true, create: true, edit: true, delete: true, approve: true },
-        inventory: { view: true, create: true, edit: true, delete: true, approve: true },
-        report: { view: true, create: true, edit: true, delete: true, approve: true },
-    },
-    2: { /* Kế toán trưởng... */ },
-    3: { /* ... */ },
-    4: { /* ... */ }
-});
-
-// Hàm khởi tạo dữ liệu trống cho các role chưa có data
-roles.value.forEach(role => {
-    if (!permissions[role.id]) {
-        permissions[role.id] = {};
-        features.forEach(f => {
-            permissions[role.id][f.key] = { view: false, create: false, edit: false, delete: false, approve: false };
-        });
+// 1. GET: Lấy danh sách
+const fetchUsers = async () => {
+    try {
+        const res = await axios.get(API_URL);
+        users.value = res.data;
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu:", error);
     }
+};
+
+// 2. Mở Modal Thêm mới
+const openAddModal = () => {
+    formModal.value = { isOpen: true, isEdit: false, data: null };
+};
+
+// 3. Mở Modal Sửa
+const openEditModal = (user) => {
+    formModal.value = { isOpen: true, isEdit: true, data: user };
+};
+
+// 4. Mở Modal Xoá
+const openDeleteModal = (user) => {
+    deleteModal.value = { isOpen: true, data: user };
+};
+
+// 5. Xử lý Submit Form (POST hoặc PUT)
+const handleFormSubmit = async (formData) => {
+    try {
+        if (formModal.value.isEdit) {
+            // PUT: Cập nhật
+            await axios.put(`${API_URL}/${formData.id}`, formData);
+        } else {
+            // POST: Thêm mới
+            await axios.post(API_URL, formData);
+        }
+        formModal.value.isOpen = false;
+        fetchUsers(); // Load lại bảng
+    } catch (error) {
+        alert("Thao tác thất bại. Vui lòng kiểm tra lại!");
+    }
+};
+
+// 6. Xử lý Xoá (DELETE)
+const handleDelete = async () => {
+    try {
+        await axios.delete(`${API_URL}/${deleteModal.value.data.id}`);
+        deleteModal.value.isOpen = false;
+        fetchUsers(); // Load lại bảng
+    } catch (error) {
+        alert("Không thể xoá người dùng này!");
+    }
+};
+
+// --- Logic tìm kiếm ---
+const filteredUsers = computed(() => {
+    const q = searchQuery.value.toLowerCase().trim();
+    return users.value.filter(u =>
+        u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    );
 });
 
-const selectRole = (role) => {
-    selectedRole.value = role;
-};
-
-const savePermissions = () => {
-    console.log('Đang lưu quyền cho role:', selectedRole.value.name, permissions[selectedRole.value.id]);
-    alert('Đã lưu phân quyền thành công!');
-};
-
-const addNewRole = () => {
-    alert('Chức năng thêm vai trò mới');
-};
+onMounted(fetchUsers);
 </script>
 
+
 <style scoped>
+
 .permission-container {
-    padding: 20px;
+    padding: 24px;
     background-color: #f8f9fa;
-    min-height: 100vh;
-}
-
-.main-content {
+    height: 100vh; /* Cố định chiều cao bằng màn hình */
     display: flex;
-    gap: 20px;
-    margin-top: 20px;
+    flex-direction: column;
+    overflow: hidden; /* Ngăn scroll toàn màn hình */
 }
 
-/* Sidebar bên trái */
-.role-sidebar {
-    width: 250px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    overflow: hidden;
+.main-table-card {
+    flex: 1; /* Tự động chiếm hết không gian còn lại */
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Quan trọng để flexbox hoạt động đúng khi scroll */
 }
 
-.sidebar-header {
-    padding: 15px;
-    background: #6f42c1;
-    color: white;
+.header-page {
     display: flex;
     justify-content: space-between;
     align-items: center;
-}
-
-.role-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.role-list li {
-    padding: 12px 15px;
-    cursor: pointer;
-    border-bottom: 1px solid #eee;
-    transition: all 0.3s;
-}
-
-.role-list li:hover {
-    background-color: #f0ebf8;
-}
-
-.role-list li.active {
-    background-color: #e9ecef;
-    border-left: 4px solid #6f42c1;
-    font-weight: bold;
-}
-
-/* Bảng bên phải */
-.permission-table-container {
-    flex: 1;
-}
-
-.table-card {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-}
-
-.table-header {
-    display: flex;
-    justify-content: space-between;
     margin-bottom: 20px;
-    align-items: center;
 }
 
-.role-name {
-    color: #6f42c1;
+.header-page h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
 }
 
-.permission-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.permission-table th,
-.permission-table td {
-    border: 1px solid #dee2e6;
-    padding: 12px;
-    text-align: center;
-}
-
-.permission-table th {
-    background-color: #f8f9fa;
-}
-
-.feature-name {
-    text-align: left !important;
-}
-
-.btn-save {
-    background: #28a745;
+/* Nút thêm mới nhỏ gọn và tinh tế hơn */
+.btn-add-small {
+    background-color: #28a745;
     color: white;
     border: none;
-    padding: 8px 20px;
+    padding: 8px 16px;
     border-radius: 4px;
     cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: 0.2s;
 }
 
-.btn-add {
+.btn-add-small:hover {
+    background-color: #218838;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filter-section {
     background: white;
-    color: #6f42c1;
-    border: none;
-    border-radius: 4px;
-    width: 24px;
-    cursor: pointer;
-    font-weight: bold;
+    padding: 16px;
+    border: 1px solid #e9ecef;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
 }
 
-.empty-state {
-    text-align: center;
-    padding: 50px;
-    background: #fff;
-    border-radius: 8px;
-    color: #6c757d;
+.search-wrapper {
+    position: relative;
+    width: 300px;
+}
+
+.search-wrapper input {
+    width: 100%;
+    padding: 8px 32px 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.search-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+}
+
+.table-footer {
+    padding: 12px 20px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    font-size: 14px;
+    color: #666;
 }
 </style>

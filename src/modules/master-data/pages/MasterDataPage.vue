@@ -1,8 +1,13 @@
 <template>
   <div class="master-data-page flex flex-col h-screen bg-gray-100 overflow-hidden">
-
-    <MasterDataToolbar @search="handleSearch" @filter="handleFilter" @refresh="handleRefresh"
-      @add-new="openDrawerForAdd" />
+    <MasterDataToolbar 
+      :currentType="currentType"
+      @change-type="handleTypeChange"
+      @search="handleSearch" 
+      @filter="handleFilter" 
+      @refresh="handleRefresh"
+      @add-new="openDrawerForAdd" 
+    />
 
     <div class="content-body flex-1 overflow-hidden p-4">
       <div class="bg-white rounded-lg shadow h-full relative">
@@ -10,14 +15,14 @@
           <div class="spinner"></div>
         </div>
 
-        <MasterDataTable @edit="openDrawerForEdit" @delete="handleDelete" />
+        <MasterDataTable :type="currentType" @edit="openDrawerForEdit" @delete="handleDelete" />
       </div>
     </div>
 
     <MasterDataPagination :total="store.pagination.total" :pageSize="store.pagination.pageSize"
       v-model:currentPage="store.pagination.page" @change="store.fetchItems" />
 
-    <MasterDataDrawer v-if="isDrawerOpen" :initialData="selectedItem" @close="closeDrawer"
+    <MasterDataDrawer v-if="isDrawerOpen" :type="currentType" :initialData="selectedItem" @close="closeDrawer"
       @save-success="handleSaveSuccess" />
   </div>
 </template>
@@ -25,23 +30,28 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useMasterDataStore } from '../store/masterData.store';
-
-// Import các component con (Đảm bảo đường dẫn đúng với cấu trúc file của bạn)
 import MasterDataToolbar from '../components/MasterDataToolbar.vue';
 import MasterDataTable from '../components/MasterDataTable.vue';
 import MasterDataPagination from '../components/MasterDataPagination.vue';
 import MasterDataDrawer from '../components/MasterDataDrawer.vue';
 
 const store = useMasterDataStore();
-
-// Trạng thái điều khiển Drawer
 const isDrawerOpen = ref(false);
 const selectedItem = ref(null);
 
-// Lấy dữ liệu lần đầu khi Component được gắn vào DOM
+// State để quản lý danh mục hiện tại
+const currentType = ref('CUSTOMER'); 
+
 onMounted(() => {
-  store.fetchItems();
+  store.fetchItems(currentType.value);
 });
+
+// Xử lý khi nhấn đổi Tab trên Toolbar
+const handleTypeChange = (newType) => {
+  currentType.value = newType;
+  store.pagination.page = 1;
+  store.fetchItems(newType); // Store cần nhận thêm type để gọi API đúng
+};
 
 // --- XỬ LÝ LOGIC ---
 
