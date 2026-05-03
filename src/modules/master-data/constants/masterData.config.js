@@ -30,3 +30,25 @@ export const COLUMN_CONFIG = {
   ],
   // ... các danh mục khác tương tự
 };
+
+export const FORM_CONFIG = {
+  ACCOUNT: [
+    { name: 'AccountNumber', label: 'Số hiệu tài khoản', type: 'text', required: true },
+    { name: 'AccountName', label: 'Tên tài khoản', type: 'text', required: true },
+    { name: 'ParentId', label: 'Tài khoản tổng hợp', type: 'select', options: [] }, // Load từ API
+    { name: 'Type', label: 'Tính chất', type: 'select', options: ['Dư Nợ', 'Dư Có', 'Lưỡng tính'] }
+  ],
+  CUSTOMER: [
+    { name: 'CustomerCode', label: 'Mã khách hàng', type: 'text', required: true },
+    { name: 'CustomerName', label: 'Tên khách hàng', type: 'text', required: true },
+    { name: 'TaxCode', label: 'Mã số thuế', type: 'text' },
+    { name: 'Address', label: 'Địa chỉ', type: 'textarea' }
+  ],
+  PRODUCT: [
+    { name: 'ProductCode', label: 'Mã hàng', type: 'text', required: true },
+    { name: 'ProductName', label: 'Tên hàng hóa', type: 'text', required: true },
+    { name: 'Unit', label: 'Đơn vị tính', type: 'text' },
+    { name: 'PurchasePrice', label: 'Giá mua định mức', type: 'number' }
+  ]
+  // Các danh mục khác tương tự...
+};

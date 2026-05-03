@@ -1,23 +1,49 @@
 import { defineStore } from 'pinia';
-import { MasterDataService } from '../service/masterData.api';
+import { accountService } from '../service/masterData.api';
 
 export const useMasterDataStore = defineStore('masterData', {
   state: () => ({
     items: [],
     loading: false,
-    pagination: { total: 0, page: 1, pageSize: 20 },
+    pagination: { page: 1, pageSize: 20, total: 0 },
     filters: { search: '', status: null }
   }),
+
   actions: {
-    async fetchItems() {
+    async fetchItems(type) {
       this.loading = true;
       try {
-        const res = await MasterDataService.getAll({ ...this.pagination, ...this.filters });
-        this.items = res.data.items;
-        this.pagination.total = res.data.total;
+        let response;
+
+        if (type === 'ACCOUNT') {
+          // Gọi trực tiếp không truyền search
+          response = await accountService.getAll();
+        } else {
+          const pType = type === 'CUSTOMER' ? 1 : 2;
+          response = await accountService.getPartners(pType);
+        }
+
+        if (response.data && response.data.success) {
+          this.items = response.data.data; 
+          this.pagination.total = response.data.data.length;
+        }
+      } catch (error) {
+        console.error("Fetch error chi tiết:", error);
       } finally {
         this.loading = false;
       }
+    },
+
+    async deleteItem(type, id) {
+      try {
+        type === 'ACCOUNT' ? await accountService.delete(id) : await accountService.deletePartner(id);
+        return true;
+      } catch (error) { return false; }
+    },
+
+    resetFilters() {
+      this.filters.search = '';
+      this.pagination.page = 1;
     }
   }
 });

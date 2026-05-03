@@ -170,23 +170,24 @@ const router = createRouter({
 })
 
 // BẢO VỆ ROUTER TRƯỚC KHI CHUYỂN TRANG
-router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-  const isAuthenticated = authStore.isLoggedIn
+// Thay đổi đoạn BẢO VỆ ROUTER TRƯỚC KHI CHUYỂN TRANG
+router.beforeEach(async (to, from) => {
+  const authStore = useAuthStore();
+  const isAuthenticated = authStore.isLoggedIn;
 
   // Nếu trang yêu cầu đăng nhập mà người dùng chưa đăng nhập
   if (to.meta.requiresAuth && !isAuthenticated) {
-    authStore.returnUrl = to.fullPath // Lưu lại URL để tí đăng nhập xong trả về đúng chỗ
-    next('/login')
+    authStore.returnUrl = to.fullPath;
+    return '/login'; // Thay vì next('/login')
   }
+
   // Nếu đã đăng nhập rồi mà cố tình quay lại trang /login
-  else if (to.path === '/login' && isAuthenticated) {
-    next('/') // Đá về Dashboard
+  if (to.path === '/login' && isAuthenticated) {
+    return '/'; // Thay vì next('/')
   }
-  // Hợp lệ thì cho đi tiếp
-  else {
-    next()
-  }
-})
+
+  // Mặc định cho phép đi tiếp (Thay vì next())
+  return true;
+});
 
 export default router

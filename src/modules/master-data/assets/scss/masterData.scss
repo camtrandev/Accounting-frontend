@@ -1,0 +1,146 @@
+
+.table-container {
+  width: 100%;
+  height: 100%;       /* Chiếm trọn chiều cao từ table-wrapper ở Page cha */
+  overflow: auto;     /* Kích hoạt thanh cuộn dọc và ngang */
+  position: relative;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  
+  /* Đảm bảo thanh cuộn luôn mượt mà trên các trình duyệt */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.m-table {
+  width: 100%;
+  border-collapse: separate; /* BẮT BUỘC để position: sticky hoạt động */
+  border-spacing: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  min-width: 1100px; /* Độ rộng tối thiểu để kích hoạt scroll ngang trên màn hình nhỏ */
+
+  thead {
+    th {
+      position: sticky;
+      top: 0;           /* Khóa tiêu đề đứng yên khi cuộn dọc */
+      z-index: 20;      /* Cao hơn tbody */
+      background-color: #f2f5f8;
+      color: #454545;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 12px 10px;
+      text-align: left;
+      border-bottom: 2px solid #cdd3d9; /* Đường kẻ đậm hơn phân cách header */
+      white-space: nowrap;
+    }
+  }
+
+  tbody {
+    tr {
+      background-color: #fff;
+      transition: background-color 0.15s ease;
+
+      &:hover {
+        background-color: #f1f6ff !important; 
+        
+        /* Khi hover, các ô sticky cũng phải đổi màu theo */
+        .sticky-left, .sticky-right {
+          background-color: #f1f6ff !important;
+        }
+      }
+
+      td {
+        padding: 10px;
+        border-bottom: 1px solid #e0e0e0;
+        font-size: 14px;
+        color: #1f2937;
+        white-space: nowrap;
+        vertical-align: middle;
+      }
+    }
+  }
+
+  /* --- Xử lý Cố định Cột (Sticky Columns) --- */
+
+  .sticky-left {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background-color: #fff; /* Cần màu nền để che dữ liệu khi cuộn ngang */
+    border-right: 1px solid #e0e0e0;
+    
+    // Header ở cột sticky phải có z-index cao hơn nữa
+    &.header-sticky {
+      z-index: 30;
+      background-color: #f2f5f8;
+    }
+  }
+
+  .sticky-right {
+    position: sticky;
+    right: 0;
+    z-index: 10;
+    background-color: #fff;
+    border-left: 1px solid #e0e0e0;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.05);
+
+    &.header-sticky {
+      z-index: 30;
+      background-color: #f2f5f8;
+    }
+  }
+}
+
+/* --- Nhóm các Class tiện ích và Action --- */
+
+.action-btns {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+
+  i {
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+
+    &.edit { 
+      color: #2563eb; 
+      &:hover { background: #dbeafe; }
+    }
+    
+    &.delete { 
+      color: #ef4444; 
+      &:hover { background: #fee2e2; }
+    }
+  }
+}
+
+/* Phân cấp tài khoản (Thụt đầu dòng) */
+.font-bold { font-weight: 600; }
+.text-italic { font-style: italic; }
+.color-gray { color: #6b7280; }
+
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
+
+/* Badge Trạng thái */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  
+  &.active {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+  
+  &.inactive {
+    background-color: #fee2e2;
+    color: #991b1b;
+  }
+}

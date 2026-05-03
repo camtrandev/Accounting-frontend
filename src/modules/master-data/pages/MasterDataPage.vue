@@ -1,86 +1,99 @@
 <template>
-  <div class="master-data-page flex flex-col h-screen bg-gray-100 overflow-hidden">
-    <MasterDataToolbar 
-      :currentType="currentType"
-      @change-type="handleTypeChange"
-      @search="handleSearch" 
-      @filter="handleFilter" 
-      @refresh="handleRefresh"
-      @add-new="openDrawerForAdd" 
-    />
+  <div class="master-data-page">
+    <!-- 1. Cố định phía trên -->
+    <header class="page-header">
+      <MasterDataToolbar :current-type="currentType" @change-type="handleTypeChange" @search="handleSearch"
+        @refresh="handleRefresh" @add-new="openDrawerForAdd" />
+    </header>
 
-    <div class="content-body flex-1 overflow-hidden p-4">
-      <div class="bg-white rounded-lg shadow h-full relative">
+    <!-- 2. Thân trang: Sử dụng Flex-1 để chiếm toàn bộ diện tích còn lại -->
+    <main class="page-content">
+      <div class="content-card">
+
+        <!-- Loading Overlay -->
         <div v-if="store.loading" class="loading-overlay">
           <div class="spinner"></div>
         </div>
 
-        <MasterDataTable :type="currentType" @edit="openDrawerForEdit" @delete="handleDelete" />
+        <!-- Vùng chứa bảng - Đây là vùng duy nhất được phép Scroll -->
+        <div class="table-scroll-area">
+          <AccountTable v-if="currentType === 'ACCOUNT'" :data="store.items" @edit="openDrawerForEdit"
+            @delete="handleDelete" />
+
+          <!-- Placeholder cho danh mục khác -->
+          <div v-else class="empty-state">
+            <i class="fas fa-tools"></i>
+            <p>Chức năng {{ currentTypeLabel }} đang được cập nhật...</p>
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
 
-    <MasterDataPagination :total="store.pagination.total" :pageSize="store.pagination.pageSize"
-      v-model:currentPage="store.pagination.page" @change="store.fetchItems" />
+    <!-- 3. Cố định phía dưới -->
+    <footer class="page-footer">
+      <MasterDataPagination v-if="store.pagination.total > 0" :total="store.pagination.total"
+        :page-size="store.pagination.pageSize" v-model:current-page="store.pagination.page" @change="loadData" />
+    </footer>
 
-    <MasterDataDrawer v-if="isDrawerOpen" :type="currentType" :initialData="selectedItem" @close="closeDrawer"
+    <!-- Form Drawer -->
+    <MasterDataDrawer v-if="isDrawerOpen" :type="currentType" :initial-data="selectedItem" @close="closeDrawer"
       @save-success="handleSaveSuccess" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useMasterDataStore } from '../store/masterData.store';
+
 import MasterDataToolbar from '../components/MasterDataToolbar.vue';
-import MasterDataTable from '../components/MasterDataTable.vue';
+import AccountTable from '../components/tables/AccountTable.vue';
 import MasterDataPagination from '../components/MasterDataPagination.vue';
 import MasterDataDrawer from '../components/MasterDataDrawer.vue';
 
 const store = useMasterDataStore();
+const currentType = ref('ACCOUNT');
 const isDrawerOpen = ref(false);
 const selectedItem = ref(null);
 
-// State để quản lý danh mục hiện tại
-const currentType = ref('CUSTOMER'); 
-
-onMounted(() => {
-  store.fetchItems(currentType.value);
+const currentTypeLabel = computed(() => {
+  const labels = {
+    'ACCOUNT': 'Hệ thống tài khoản',
+    'CUSTOMER': 'Khách hàng',
+    'SUPPLIER': 'Nhà cung cấp',
+    'WAREHOUSE': 'Kho'
+  };
+  return labels[currentType.value] || currentType.value;
 });
 
-// Xử lý khi nhấn đổi Tab trên Toolbar
+const loadData = async () => {
+  try {
+    await store.fetchItems(currentType.value);
+  } catch (error) {
+    console.error(`[MasterData] Fetch Error:`, error);
+  }
+};
+
 const handleTypeChange = (newType) => {
   currentType.value = newType;
-  store.pagination.page = 1;
-  store.fetchItems(newType); // Store cần nhận thêm type để gọi API đúng
+  store.resetFilters();
+  loadData();
 };
 
-// --- XỬ LÝ LOGIC ---
-
-// 1. Tìm kiếm và Lọc
 const handleSearch = (query) => {
   store.filters.search = query;
-  store.pagination.page = 1; // Reset về trang 1 khi tìm kiếm
-  store.fetchItems();
-};
-
-const handleFilter = (status) => {
-  store.filters.status = status;
   store.pagination.page = 1;
-  store.fetchItems();
+  loadData();
 };
 
-const handleRefresh = () => {
-  store.resetFilters(); // Hàm này bạn nên viết trong store.js
-  store.fetchItems();
-};
+const handleRefresh = () => loadData();
 
-// 2. Thêm mới / Sửa
 const openDrawerForAdd = () => {
-  selectedItem.value = null; // Reset dữ liệu về trống
+  selectedItem.value = null;
   isDrawerOpen.value = true;
 };
 
 const openDrawerForEdit = (item) => {
-  selectedItem.value = { ...item }; // Copy dữ liệu để tránh tham chiếu
+  selectedItem.value = { ...item };
   isDrawerOpen.value = true;
 };
 
@@ -91,31 +104,72 @@ const closeDrawer = () => {
 
 const handleSaveSuccess = () => {
   closeDrawer();
-  store.fetchItems(); // Load lại danh sách sau khi lưu
+  loadData();
 };
 
-// 3. Xóa
 const handleDelete = async (id) => {
-  // Logic xóa gọi từ store
-  const success = await store.deleteItem(id);
-  if (success) {
-    store.fetchItems();
+  if (confirm("Bạn có chắc chắn muốn xóa bản ghi này?")) {
+    const success = await store.deleteItem(currentType.value, id);
+    if (success) {
+      if (store.items.length === 1 && store.pagination.page > 1) {
+        store.pagination.page--;
+      }
+      loadData();
+    }
   }
 };
+
+onMounted(loadData);
 </script>
 
 <style scoped>
+/* Khung ngoài cùng: Khóa độ cao màn hình */
 .master-data-page {
-  /* Đảm bảo page luôn chiếm hết màn hình và không bị cuộn cả trang */
-  max-height: 100vh;
-}
-
-.content-body {
-  /* Vùng này sẽ tự co giãn và cho phép table bên trong tự cuộn */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
   background-color: #f3f4f6;
+  overflow: hidden;
+  /* Tuyệt đối không cho scroll cả trang */
 }
 
-/* Hiệu ứng Loading */
+.page-header {
+  flex-shrink: 0;
+  /* Không cho phép header bị co lại */
+}
+
+.page-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* BẮT BUỘC PHẢI CÓ DÒNG NÀY */
+  padding: 1rem;
+  overflow: hidden; 
+}
+
+.content-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* CŨNG CẦN CÓ Ở ĐÂY */
+  background: white;
+  overflow: hidden;
+}
+
+.table-scroll-area {
+  flex: 1;
+  overflow: auto; /* Thanh scroll sẽ hiện ở đây */
+  width: 100%;
+}
+
+.page-footer {
+  flex-shrink: 0;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Các UI phụ trợ */
 .loading-overlay {
   position: absolute;
   inset: 0;
@@ -123,7 +177,7 @@ const handleDelete = async (id) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 50;
+  z-index: 100;
 }
 
 .spinner {
@@ -132,16 +186,23 @@ const handleDelete = async (id) => {
   border: 4px solid #f3f3f3;
   border-top: 4px solid #2563eb;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
+  to {
     transform: rotate(360deg);
   }
+}
+
+.empty-state {
+  padding: 3rem;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.empty-state i {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
 }
 </style>

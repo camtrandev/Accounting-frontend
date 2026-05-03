@@ -1,236 +1,148 @@
 <template>
-    <transition name="slide">
-        <div class="drawer-overlay" @click.self="$emit('close')">
-            <div class="drawer-content">
-                <div class="drawer-header">
-                    <h3>{{ isEdit ? 'Sửa khách hàng' : 'Thêm mới khách hàng' }}</h3>
-                    <button class="btn-close" @click="$emit('close')">×</button>
-                </div>
+  <div class="drawer-overlay" @click.self="$emit('close')">
+    <div class="drawer-content">
+      <div class="drawer-header">
+        <h3 class="text-xl font-bold">
+          {{ initialData ? 'Sửa' : 'Thêm mới' }} {{ currentTitle }}
+        </h3>
+        <button class="close-btn" @click="$emit('close')">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
 
-                <div class="drawer-body">
-                    <form @submit.prevent="save">
-                        <div class="form-group">
-                            <label>Mã khách hàng <span class="required">*</span></label>
-                            <input v-model="formData.Code" type="text" placeholder="KH001" ref="firstInput" />
-                            <small class="error-text" v-if="errors.Code">{{ errors.Code }}</small>
-                        </div>
+      <div class="drawer-body">
+        <component 
+          :is="currentFormComponent" 
+          :data="formData" 
+        />
+      </div>
 
-                        <div class="form-group">
-                            <label>Tên khách hàng <span class="required">*</span></label>
-                            <input v-model="formData.Name" type="text" placeholder="Công ty TNHH ABC" />
-                        </div>
-
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label>Mã số thuế</label>
-                                <input v-model="formData.TaxCode" type="text" />
-                            </div>
-                            <div class="form-group">
-                                <label>Số điện thoại</label>
-                                <input v-model="formData.Phone" type="text" />
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>Địa chỉ</label>
-                            <textarea v-model="formData.Address" rows="3"></textarea>
-                        </div>
-
-                        <div class="form-group checkbox-group">
-                            <input type="checkbox" id="active" v-model="formData.IsActive" />
-                            <label for="active">Đang theo dõi</label>
-                        </div>
-                    </form>
-                </div>
-
-                <div class="drawer-footer">
-                    <button class="btn-cancel" @click="$emit('close')">Hủy bỏ</button>
-                    <button class="btn-save" @click="save">Cất (Lưu)</button>
-                </div>
-            </div>
-        </div>
-    </transition>
+      <div class="drawer-footer">
+        <button class="btn-secondary" @click="$emit('close')">Hủy bỏ</button>
+        <button class="btn-primary" @click="handleSave">
+          <i class="fas fa-save mr-2"></i> Lưu dữ liệu
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { useMasterDataStore } from '../store/masterData.store';
 
-const props = defineProps(['initialData']);
-const isEdit = ref(!!props.initialData?.Id);
-const firstInput = ref(null);
+// 1. Import tất cả 5 Form bạn vừa tạo
+import AccountForm from './forms/AccountForm.vue';
+import CustomerForm from './forms/CustomerForm.vue';
+import SupplierForm from './forms/SupplierForm.vue';
+import ProductForm from './forms/ProductForm.vue';
+import WarehouseForm from './forms/WarehouseForm.vue';
 
-const formData = ref({
-    Code: '',
-    Name: '',
-    TaxCode: '',
-    Phone: '',
-    Address: '',
-    IsActive: true,
-    ...props.initialData
-});
+const props = defineProps(['type', 'initialData']);
+const emit = defineEmits(['close', 'save-success']);
+const store = useMasterDataStore();
 
-const errors = ref({});
+// Khởi tạo dữ liệu form (Nếu sửa thì lấy data cũ, nếu thêm thì để trống)
+const formData = ref(props.initialData ? { ...props.initialData } : {});
 
-onMounted(() => {
-    // Tự động focus vào ô đầu tiên khi mở form
-    firstInput.value?.focus();
-});
-
-const save = () => {
-    // Logic validation cơ bản
-    if (!formData.value.Code) {
-        errors.value.Code = "Mã không được để trống";
-        return;
-    }
-    console.log("Saving data...", formData.value);
-    // Gọi Store: store.save(formData.value)
+// 2. Bản đồ ánh xạ giữa Type và Component Form
+const formMap = {
+  ACCOUNT: { component: AccountForm, title: 'tài khoản' },
+  CUSTOMER: { component: CustomerForm, title: 'khách hàng' },
+  SUPPLIER: { component: SupplierForm, title: 'nhà cung cấp' },
+  PRODUCT: { component: ProductForm, title: 'vật tư hàng hóa' },
+  WAREHOUSE: { component: WarehouseForm, title: 'kho' }
 };
+
+// Lấy Component tương ứng
+const currentFormComponent = computed(() => formMap[props.type]?.component);
+
+// Lấy Tiêu đề tương ứng
+const currentTitle = computed(() => formMap[props.type]?.title || 'danh mục');
+
+// 3. Logic xử lý Lưu dữ liệu
+const handleSave = async () => {
+  try {
+    // Gọi action lưu từ store (Xử lý cả Add và Update)
+    const success = await store.saveItem(props.type, formData.value);
+    
+    if (success) {
+      emit('save-success'); // Thông báo cho trang chính load lại bảng
+    }
+  } catch (error) {
+    console.error("Lỗi khi lưu:", error);
+    alert("Có lỗi xảy ra, vui lòng kiểm tra lại dữ liệu.");
+  }
+};
+
+// Theo dõi nếu initialData thay đổi (khi người dùng bấm từ dòng này sang dòng khác)
+watch(() => props.initialData, (newVal) => {
+  formData.value = newVal ? { ...newVal } : {};
+}, { deep: true });
 </script>
 
-<style scoped>
-/* OVERLAY & LAYOUT */
+<style lang="scss" scoped>
 .drawer-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 100;
-    display: flex;
-    justify-content: flex-end;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
 }
 
 .drawer-content {
-    width: 450px;
-    max-width: 90%;
-    height: 100%;
-    background: white;
-    display: flex;
-    flex-direction: column;
-    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+  width: 500px; /* Độ rộng form chuẩn kế toán */
+  background: white;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -5px 0 15px rgba(0,0,0,0.1);
+  animation: slideIn 0.3s ease-out;
 }
 
-/* HEADER */
 .drawer-header {
-    padding: 16px 24px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.drawer-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: #1f2937;
-}
-
-.btn-close {
-    font-size: 24px;
-    background: none;
-    border: none;
-    cursor: pointer;
-}
-
-/* BODY & FORM */
 .drawer-body {
-    flex: 1;
-    padding: 24px;
-    overflow-y: auto;
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto; /* Cho phép cuộn nếu form dài */
 }
 
-.form-group {
-    margin-bottom: 16px;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 6px;
-    font-weight: 500;
-    font-size: 14px;
-}
-
-.required {
-    color: red;
-}
-
-input,
-textarea {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 14px;
-}
-
-input:focus {
-    border-color: #2563eb;
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
-}
-
-.grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-}
-
-.checkbox-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.checkbox-group input {
-    width: auto;
-}
-
-/* FOOTER */
 .drawer-footer {
-    padding: 16px 24px;
-    border-top: 1px solid #eee;
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
-.btn-cancel {
-    padding: 10px 20px;
-    border: 1px solid #d1d5db;
-    background: white;
-    border-radius: 4px;
-    cursor: pointer;
+/* Nút bấm chuẩn UI */
+.btn-primary {
+  background: #2563eb;
+  color: white;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-weight: 600;
+  &:hover { background: #1d4ed8; }
 }
 
-.btn-save {
-    padding: 10px 20px;
-    background: #2563eb;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 600;
+.btn-secondary {
+  background: white;
+  border: 1px solid #d1d5db;
+  padding: 8px 20px;
+  border-radius: 4px;
+  &:hover { background: #f9fafb; }
 }
 
-.btn-save:hover {
-    background: #1d4ed8;
-}
-
-/* ANIMATION */
-.slide-enter-active,
-.slide-leave-active {
-    transition: transform 0.3s ease;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-    transform: translateX(100%);
-}
-
-.error-text {
-    color: #dc2626;
-    font-size: 12px;
-    margin-top: 4px;
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 </style>
