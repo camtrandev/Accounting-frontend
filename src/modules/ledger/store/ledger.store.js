@@ -1,6 +1,6 @@
 // store/ledger.store.js
 import { defineStore } from 'pinia'; // Khuyên dùng Pinia cho Vue 3
-import ledgerService from '../service/ledger.service';
+import ledgerApi from '../service/ledger.service';
 
 export const useLedgerStore = defineStore('ledger', {
   state: () => ({
@@ -18,7 +18,7 @@ export const useLedgerStore = defineStore('ledger', {
     async loadLedger() {
       this.loading = true;
       try {
-        const response = await ledgerService.getAll(this.filters);
+        const response = await ledgerApi.getAll(this.filters);
         this.entries = response.data;
         this.summary = response.summary;
       } catch (error) {

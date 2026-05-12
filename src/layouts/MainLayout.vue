@@ -19,10 +19,12 @@ const handleToggle = (value) => {
 
     <div class="main">
       <Topbar />
-
-      <AppContainer>
+      <div class="style_container">
+        <AppContainer>
         <router-view />
       </AppContainer>
+      </div>
+      
     </div>
     <Chatbots />
   </div>
@@ -55,6 +57,10 @@ const handleToggle = (value) => {
 
 .layout.collapse{
   --sidebar-width:80px;
+}
+
+.style_container {
+  margin-left: 10px;
 }
 
 </style>

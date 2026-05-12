@@ -4,7 +4,7 @@
       <div class="form-group col-6">
         <label>Mã khách hàng <span class="required">*</span></label>
         <input 
-          v-model="data.CustomerCode" 
+          v-model="data.PartnerCode" 
           type="text" 
           class="m-input" 
           placeholder="Ví dụ: KH001"
@@ -24,7 +24,7 @@
     <div class="form-group">
       <label>Tên khách hàng <span class="required">*</span></label>
       <input 
-        v-model="data.CustomerName" 
+        v-model="data.PartnerName" 
         type="text" 
         class="m-input" 
         placeholder="Tên cá nhân hoặc công ty"
@@ -43,74 +43,44 @@
 
     <div class="form-row">
       <div class="form-group col-6">
-        <label>Số điện thoại</label>
+        <label>Hạn mức nợ</label>
         <input 
-          v-model="data.PhoneNumber" 
-          type="text" 
-          class="m-input" 
+          v-model="data.DebtLimit" 
+          type="number" 
+          class="m-input text-right" 
+          placeholder="0.00"
         />
       </div>
       <div class="form-group col-6">
-        <label>Email</label>
-        <input 
-          v-model="data.Email" 
-          type="email" 
-          class="m-input" 
-          placeholder="example@gmail.com"
-        />
-      </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group col-6">
-        <label>Nhóm khách hàng</label>
-        <select v-model="data.CustomerGroupId" class="m-input">
-          <option :value="null">-- Chọn nhóm --</option>
-          <option value="1">Khách lẻ</option>
-          <option value="2">Khách đại lý</option>
-          <option value="3">Khách VIP</option>
+        <label>Phân loại đối tác <span class="required">*</span></label>
+        <!-- Khóa cứng không cho sửa vì form này là thêm Khách hàng -->
+        <select v-model="data.PartnerType" class="m-input disabled-input" disabled>
+          <option :value="1">1 - Khách hàng</option>
+          <option :value="2">2 - Nhà cung cấp</option>
+          <option :value="3">3 - Cả hai</option>
         </select>
       </div>
-      <div class="form-group col-6">
-        <label>Số tài khoản ngân hàng</label>
-        <input 
-          v-model="data.BankAccount" 
-          type="text" 
-          class="m-input" 
-        />
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Ghi chú</label>
-      <textarea 
-        v-model="data.Description" 
-        class="m-input" 
-        rows="2"
-      ></textarea>
     </div>
   </div>
 </template>
 
 <script setup>
-/**
- * Data được truyền từ MasterDataDrawer qua props
- * để đảm bảo tính phản hồi (Reactivity)
- */
 const props = defineProps({
   data: {
     type: Object,
-    default: () => ({})
+    default: () => ({
+      PartnerType: 1, // Mặc định gán là 1 (Customer) theo DB schema
+      DebtLimit: 0
+    })
   }
 });
 </script>
 
 <style scoped>
-/* Các style này nên đưa vào masterData.scss để dùng chung */
 .form-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 .form-row {
   display: flex;
@@ -121,12 +91,13 @@ const props = defineProps({
 }
 .form-group label {
   display: block;
-  font-weight: 500;
-  margin-bottom: 4px;
+  font-weight: 600;
+  margin-bottom: 6px;
   font-size: 13px;
+  color: #374151;
 }
 .required {
-  color: red;
+  color: #ef4444;
 }
 .m-input {
   width: 100%;
@@ -134,8 +105,18 @@ const props = defineProps({
   border: 1px solid #d1d5db;
   border-radius: 4px;
   outline: none;
+  font-size: 14px;
+  box-sizing: border-box;
 }
 .m-input:focus {
   border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+.m-input.text-right {
+  text-align: right;
+}
+.disabled-input {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
 }
 </style>

@@ -72,9 +72,10 @@ const handleChangeTab = (id) => {
 };
 
 const onSearchInput = () => {
-  clearTimeout(timeout);
+  if (timeout) clearTimeout(timeout);
   timeout = setTimeout(() => {
-    emit('search', searchQuery.value);
+    // Phát sự kiện 'search' kèm theo giá trị text
+    emit('search', searchQuery.value.trim()); 
   }, 500);
 };
 

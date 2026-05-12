@@ -1,39 +1,47 @@
 <template>
   <div class="master-data-page">
-    <!-- 1. Cố định phía trên -->
-    <header class="page-header">
-      <MasterDataToolbar :current-type="currentType" @change-type="handleTypeChange" @search="handleSearch"
-        @refresh="handleRefresh" @add-new="openDrawerForAdd" />
-    </header>
+    <div class="content-card">
+      <!-- 1. Phần Top (Cố định): Chứa Tiêu đề, Nút thêm mới, Thanh Search -->
+      <div class="card-top">
+        <MasterDataToolbar :current-type="currentType" @change-type="handleTypeChange" @search="handleSearch"
+          @refresh="handleRefresh" @add-new="openDrawerForAdd" />
+      </div>
 
-    <!-- 2. Thân trang: Sử dụng Flex-1 để chiếm toàn bộ diện tích còn lại -->
-    <main class="page-content">
-      <div class="content-card">
-
+      <!-- 2. Phần Giữa (Co giãn): Chứa Table -->
+      <div class="card-main">
         <!-- Loading Overlay -->
         <div v-if="store.loading" class="loading-overlay">
           <div class="spinner"></div>
         </div>
 
-        <!-- Vùng chứa bảng - Đây là vùng duy nhất được phép Scroll -->
-        <div class="table-scroll-area">
-          <AccountTable v-if="currentType === 'ACCOUNT'" :data="store.items" @edit="openDrawerForEdit"
-            @delete="handleDelete" />
+        <AccountTable v-if="currentType === 'ACCOUNT'" :data="store.filteredItems" @edit="openDrawerForEdit"
+          @delete="handleDelete" />
 
-          <!-- Placeholder cho danh mục khác -->
-          <div v-else class="empty-state">
-            <i class="fas fa-tools"></i>
-            <p>Chức năng {{ currentTypeLabel }} đang được cập nhật...</p>
-          </div>
+        <CustomerTable v-else-if="currentType === 'CUSTOMER'" :data="store.filteredItems" @edit="openDrawerForEdit"
+          @delete="handleDelete" />
+
+        <SupplierTable v-else-if="currentType === 'SUPPLIER'" :data="store.filteredItems" @edit="openDrawerForEdit"
+          @delete="handleDelete" />
+
+        <ProductTable v-else-if="currentType === 'PRODUCT'" :data="store.filteredItems" @edit="openDrawerForEdit"
+          @delete="handleDelete" />
+
+        <WarehouseTable v-else-if="currentType === 'WAREHOUSE'" :data="store.filteredItems" @edit="openDrawerForEdit"
+          @delete="handleDelete" />
+
+        <!-- Placeholder cho danh mục khác -->
+        <div v-else class="empty-state">
+          <i class="fas fa-tools"></i>
+          <p>Chức năng {{ currentTypeLabel }} đang được cập nhật...</p>
         </div>
       </div>
-    </main>
 
-    <!-- 3. Cố định phía dưới -->
-    <footer class="page-footer">
-      <MasterDataPagination v-if="store.pagination.total > 0" :total="store.pagination.total"
-        :page-size="store.pagination.pageSize" v-model:current-page="store.pagination.page" @change="loadData" />
-    </footer>
+      <!-- 3. Phần Đáy (Cố định): Chứa Phân trang -->
+      <div class="card-bottom">
+        <MasterDataPagination v-if="store.filteredTotal > 0" :total="store.filteredTotal"
+          :page-size="store.pagination.pageSize" v-model:current-page="store.pagination.page" />
+      </div>
+    </div>
 
     <!-- Form Drawer -->
     <MasterDataDrawer v-if="isDrawerOpen" :type="currentType" :initial-data="selectedItem" @close="closeDrawer"
@@ -49,6 +57,10 @@ import MasterDataToolbar from '../components/MasterDataToolbar.vue';
 import AccountTable from '../components/tables/AccountTable.vue';
 import MasterDataPagination from '../components/MasterDataPagination.vue';
 import MasterDataDrawer from '../components/MasterDataDrawer.vue';
+import CustomerTable from '../components/tables/CustomerTable.vue'
+import SupplierTable from '../components/tables/SupplierTable.vue';
+import ProductTable from '../components/tables/ProductTable.vue';
+import WarehouseTable from '../components/tables/WarehouseTable.vue';
 
 const store = useMasterDataStore();
 const currentType = ref('ACCOUNT');
@@ -80,9 +92,8 @@ const handleTypeChange = (newType) => {
 };
 
 const handleSearch = (query) => {
-  store.filters.search = query;
-  store.pagination.page = 1;
-  loadData();
+  store.filters.search = query; 
+  // Không cần loadData(); dữ liệu tự động lọc nhờ Getter
 };
 
 const handleRefresh = () => loadData();
@@ -123,57 +134,57 @@ onMounted(loadData);
 </script>
 
 <style scoped>
-/* Khung ngoài cùng: Khóa độ cao màn hình */
+/* Khung bọc ngoài cùng */
 .master-data-page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  background-color: #f3f4f6;
+  /* Điều chỉnh số 60px bằng chiều cao topbar chung của hệ thống bạn nếu cần */
+  height: calc(100vh - 60px);
+  padding: 20px;
+  background-color: #f3f5f8;
+  box-sizing: border-box;
   overflow: hidden;
-  /* Tuyệt đối không cho scroll cả trang */
+  /* NGHIÊM CẤM scroll ở cấp độ trang */
 }
 
-.page-header {
-  flex-shrink: 0;
-  /* Không cho phép header bị co lại */
-}
-
-.page-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0; /* BẮT BUỘC PHẢI CÓ DÒNG NÀY */
-  padding: 1rem;
-  overflow: hidden; 
-}
-
+/* Thẻ Card màu trắng */
 .content-card {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0; /* CŨNG CẦN CÓ Ở ĐÂY */
-  background: white;
+  height: 100%;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   overflow: hidden;
+  height: calc(100% - 50px);
 }
 
-.table-scroll-area {
-  flex: 1;
-  overflow: auto; /* Thanh scroll sẽ hiện ở đây */
-  width: 100%;
-}
-
-.page-footer {
+/* Topbar của tính năng */
+.card-top {
   flex-shrink: 0;
-  background: white;
-  border-top: 1px solid #e5e7eb;
+  padding: 20px 24px 10px 24px;
+}
+
+/* Vùng chứa bảng - Sẽ tự động lấy không gian còn lại */
+.card-main {
+  flex: 1;
+  min-height: 0;
+  /* Bắt buộc phải có để thẻ con bên trong scroll được */
+  padding: 0 24px;
+  position: relative;
+}
+
+/* Vùng chứa phân trang */
+.card-bottom {
+  flex-shrink: 0;
+  padding: 12px 24px;
+  border-top: 1px solid #f0f0f0;
+  background-color: #fafafa;
 }
 
 /* Các UI phụ trợ */
 .loading-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -181,10 +192,10 @@ onMounted(loadData);
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #2563eb;
+  width: 36px;
+  height: 36px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #2563eb;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -196,9 +207,9 @@ onMounted(loadData);
 }
 
 .empty-state {
-  padding: 3rem;
   text-align: center;
   color: #9ca3af;
+  margin-top: 50px;
 }
 
 .empty-state i {

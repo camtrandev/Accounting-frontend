@@ -29,7 +29,7 @@ import LedgerSummaryCards from '../components/LedgerSummaryCards.vue';
 import LedgerToolbar from '../components/LedgerToolbar.vue';
 import LedgerTable from '../components/LedgerTable.vue';
 import LedgerDetailModal from '../components/LedgerDetailModal.vue';
-import ledgerService from '../service/ledger.service';
+import ledgerApi from '../service/ledger.api';
 
 // State quản lý
 const ledgerEntries = ref([]);
@@ -42,7 +42,7 @@ const selectedEntry = ref(null);
 const fetchLedgerData = async (filters = {}) => {
   isLoading.value = true;
   try {
-    const response = await ledgerService.getAll(filters);
+    const response = await ledgerApi.getAll(filters);
     ledgerEntries.value = response.data;
     summary.value = response.summary;
   } finally {

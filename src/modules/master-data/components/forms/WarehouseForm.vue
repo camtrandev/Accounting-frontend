@@ -18,3 +18,7 @@
 <script setup>
 const props = defineProps(['data']);
 </script>
+
+<style lang="scss" scoped>
+@use "../../assets/scss/form-style.scss" as *;
+</style>

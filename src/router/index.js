@@ -1,132 +1,71 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.store' // Import store để check token
+import { createRouter, createWebHistory } from 'vue-router';
+import { useAuthStore } from '@/stores/auth.store';
 
-// Import Layouts
-import AuthLayout from '@/layouts/AuthLayout.vue'
-import MainLayout from '@/layouts/MainLayout.vue'
-
-// Import Pages
-import Dashboard from '@/modules/dashboard/pages/DashboardPage.vue'
-import MasterDataPage from '@/modules/master-data/pages/MasterDataPage.vue'
-import documentPage from '@/modules/vouchers/pages/documentPage.vue'
-import DocumentPurchase from '@/modules/vouchers/components/page/documentPurchase.vue'
-
-// phần kho
-import InventoryDashboard from '@/modules/inventory/pages/InventoryDashboard.vue'
-import ReceiptFormPage from '@/modules/inventory/pages/ReceiptFormPage.vue'
-import IssueFormPage from '@/modules/inventory/pages/IssueFormPage.vue'
-
+// Import Routes theo Module
+import authRoutes from './auth.routes';
+import inventoryRoutes from './inventory.routes';
 
 const routes = [
-  // 1. Tuyến đường Đăng nhập (Sử dụng AuthLayout trống)
-  {
-    path: '/login',
-    component: AuthLayout,
-    children: [
-      {
-        path: '',
-        name: 'Login',
-        component: () => import('@/modules/auth/pages/Login.vue') // Lazy load trang Login
-      }
-    ],
-    meta: { requiresAuth: false } // Không yêu cầu đăng nhập
-  },
-
-  // 2. Các tuyến đường chính của ứng dụng (Sử dụng MainLayout)
+  ...authRoutes,
   {
     path: '/',
-    component: MainLayout,
-    meta: { requiresAuth: true }, //  Yêu cầu CÓ TOKEN mới được vào
+    component: () => import('@/layouts/MainLayout.vue'),
+    meta: { requiresAuth: true },
     children: [
       {
         path: '',
         name: 'Dashboard',
-        component: Dashboard
+        component: () => import('@/modules/dashboard/pages/DashboardPage.vue')
       },
       {
         path: 'master-data',
         name: 'MasterData',
-        component: MasterDataPage
+        component: () => import('@/modules/master-data/pages/MasterDataPage.vue')
       },
-
-      //Chứng từ
+      // Phân hệ Chứng từ (Viết trực tiếp hoặc tách file tùy độ lớn)
       {
         path: 'voucher',
         name: 'Document',
-        component: documentPage
+        component: () => import('@/modules/vouchers/pages/documentPage.vue')
       },
       {
         path: 'vouchers/purchase',
         name: 'DocumentPurchase',
-        component: DocumentPurchase
+        component: () => import('@/modules/vouchers/pages/PurchaseInvoicePage.vue')
+      },
+      {
+        path: 'vouchers/sale',
+        name: 'DocumentSale',
+        component: () => import('@/modules/vouchers/pages/SaleInvoicePage.vue')
+      },
+      {
+        path: 'vouchers/receipt',
+        name: 'DocumentReceipt',
+        component: () => import('@/modules/vouchers/pages/ReceiptVoucherPage.vue')
       },
 
-      // phần kho
       {
-        path: 'inventory',
-        name: 'InventoryDashboard',
-        component: InventoryDashboard
+        path: 'vouchers/payment',
+        name: 'DocumentPayment',
+        component: () => import('@/modules/vouchers/pages/PaymentVoucherPage.vue')
       },
 
-      {
-        path: 'receipt/create', // URL: /inventory/receipt/create
-        name: 'InventoryReceiptCreate',
-        component: ReceiptFormPage
-      },
-      // Sau này nếu có làm chức năng Sửa phiếu nhập, bạn thêm ở đây:
-      // {
-      //   path: 'receipt/edit/:id',
-      //   name: 'InventoryReceiptEdit',
-      //   component: ReceiptFormPage
-      // },
 
-      // ==========================================
-      // NHÓM 2: PHIẾU XUẤT KHO (ISSUE)
-      // ==========================================
+      // Gộp các route từ module Kho
+      ...inventoryRoutes,
+
+      // Phân hệ Báo cáo & Sổ cái
       {
-        path: 'issue/create', // URL: /inventory/issue/create
-        name: 'InventoryIssueCreate',
-        component: IssueFormPage
+        path: 'reports',
+        name: 'ReportDashboard',
+        component: () => import('@/modules/reports/pages/ReportDashboard.vue')
       },
-      // 3. KIỂM KÊ KHO
       {
-        path: 'check',
-        name: 'InventoryCheck',
-        component: () => import('../modules/inventory/pages/InventoryCheckPage.vue')
-      },
-      // 4. TÍNH GIÁ XUẤT KHO
-      {
-        path: 'costing',
-        name: 'InventoryCosting',
-        component: () => import('../modules/inventory/pages/InventoryCostingPage.vue')
-      },
-      // 5. PHIẾU CHUYỂN KHO
-      {
-        path: 'transfer',
-        name: 'InventoryTransfer', // Tên này khớp 100% với tên trong InventoryQuickActions.vue
-        component: () => import('../modules/inventory/pages/InventoryTransferPage.vue')
+        path: 'ledger',
+        name: 'LedgerPage',
+        component: () => import('@/modules/ledger/pages/LedgerPage.vue')
       },
 
-      // Trang Báo cáo
-      {
-        path: '/reports',
-        
-        children: [
-          {
-            path: '',
-            name: 'ReportDashboard',
-            component: () => import('../modules/reports/pages/ReportDashboard.vue')
-          }
-          // Sau này nếu có làm trang chi tiết cho từng báo cáo, bạn sẽ thêm vào đây.
-          // Ví dụ:
-          // {
-          //   path: 'inventory-summary',
-          //   name: 'ReportInventorySummary',
-          //   component: () => import('../modules/reports/pages/InventorySummaryReport.vue')
-          // }
-        ]
-      },
-      
       // THÊM ROUTE PHÂN QUYỀN VÀO ĐÂY
       {
         path: 'permission',
@@ -135,59 +74,35 @@ const routes = [
         meta: { requiresAuth: true, role: 'Admin' } // Chỉ Admin mới vào được
       },
 
-      {
-        path: '/ledger',
-        
-        children: [
-          {
-            path: '',
-            name: 'LedgerPage',
-            component: () => import('../modules/ledger/pages/LedgerPage.vue')
-          }
-          // Sau này nếu có làm trang chi tiết cho từng sổ cái , bạn sẽ thêm vào đây.
-          // Ví dụ:
-          // {
-          //   path: 'inventory-summary',
-          //   name: 'ReportInventorySummary',
-          //   component: () => import('../modules/reports/pages/InventorySummaryReport.vue')
-          // }
-        ]
-      },
-
     ]
   },
-
-  // 3. Chuyển hướng các URL không tồn tại về trang chủ
+  // Catch-all route
   {
     path: '/:pathMatch(.*)*',
     redirect: '/'
   }
-]
+];
 
 const router = createRouter({
   history: createWebHistory(),
   routes
-})
+});
 
-// BẢO VỆ ROUTER TRƯỚC KHI CHUYỂN TRANG
-// Thay đổi đoạn BẢO VỆ ROUTER TRƯỚC KHI CHUYỂN TRANG
-router.beforeEach(async (to, from) => {
+// Middleware Bảo vệ Router
+router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   const isAuthenticated = authStore.isLoggedIn;
 
-  // Nếu trang yêu cầu đăng nhập mà người dùng chưa đăng nhập
   if (to.meta.requiresAuth && !isAuthenticated) {
     authStore.returnUrl = to.fullPath;
-    return '/login'; // Thay vì next('/login')
+    return '/login';
   }
 
-  // Nếu đã đăng nhập rồi mà cố tình quay lại trang /login
   if (to.path === '/login' && isAuthenticated) {
-    return '/'; // Thay vì next('/')
+    return '/';
   }
 
-  // Mặc định cho phép đi tiếp (Thay vì next())
   return true;
 });
 
-export default router
+export default router;
