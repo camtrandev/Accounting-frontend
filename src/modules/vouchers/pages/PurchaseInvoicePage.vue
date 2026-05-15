@@ -16,7 +16,10 @@
                 <div class="button-group">
                     <button class="btn btn-outline btn-print-custom">
                         <i class="fas fa-print"></i> In hóa đơn
-                    </button> <button class="btn btn-primary"><i class="fas fa-save"></i> Lưu dữ liệu (F2)</button>
+                    </button>
+                    <button class="btn btn-primary" @click="handleSave">
+                        <i class="fas fa-save"></i> Lưu dữ liệu (F2)
+                    </button>
                     <button class="btn btn-ai-assistant" :class="{ 'active': showAIAssistant }"
                         @click="showAIAssistant = !showAIAssistant">
                         <span class="icon">✨</span>
@@ -26,7 +29,7 @@
             </header>
 
             <section class="card-container">
-                <VoucherPartnerInfo :model="voucher" :partners="listPartners" />
+                <VoucherPartnerInfo :model="voucher" :partners="listPartners" :warehouses="listWarehouses" />
 
                 <div class="master-extra-row">
                     <div class="field-group flex-3">
@@ -66,13 +69,15 @@
 
                     <div class="summary-line">
                         <div class="tax-config">
-                            <span class="lbl">Thuế GTGT (</span>
-                            <input type="number" v-model="voucher.TaxRate" class="tax-rate-input"
-                                @input="handleUpdateTotals" />
-                            <span class="lbl">%):</span>
+                            <!-- Tự động đổi chữ thành 'Tổng thuế' nếu hóa đơn có nhiều mức thuế khác nhau -->
+                            <span class="lbl">
+                                {{ voucher.TaxRate === null ? 'Tổng thuế:' : 'Thuế GTGT:' }}
+                            </span>
                         </div>
                         <div class="input-wrapper tax-amount-wrapper">
-                            <input type="number" v-model="voucher.TaxAmount" class="input-premium text-right" />
+                            <!-- Giữ lại ô nhập số tiền thuế để hiển thị tổng tiền thuế từ AI hoặc tính toán -->
+                            <input type="number" v-model="voucher.TaxAmount" class="input-premium text-right"
+                                @input="handleUpdateTotals" />
                         </div>
                     </div>
 
@@ -87,21 +92,29 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { useVouchersStore } from '../store/vouchers.store';
 import VoucherPartnerInfo from '../components/VoucherPartnerInfo.vue';
 import PurchaseDetailTable from '../components/PurchaseDetailTable.vue';
 import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue';
 
+const vStore = useVouchersStore();
+
 const showAIAssistant = ref(false);
 
-const listPartners = ref([
-    { Id: 101, Name: 'Công ty TNHH Dược Phẩm Tìm' },
-    { Id: 102, Name: 'Công ty CP Máy tính Phong Vũ' }
-]);
+const listPartners = computed(() => vStore.partners);
+
+const listWarehouses = computed(() => vStore.warehouses);
+
+const props = defineProps({
+    editId: { type: Number, default: null }, // Nhận ID từ trang cha truyền xuống
+    isApprovalMode: { type: Boolean, default: false } // Đánh dấu đây là Admin đang xem
+});
 
 const voucher = ref({
-    DocumentNo: 'HDMH0001',
+    DocumentNo: '',
     PartnerId: null,
+    WarehouseId: null,
     BuyerName: '',
     DocumentDate: new Date().toISOString().substr(0, 10),
     Address: '',
@@ -112,56 +125,238 @@ const voucher = ref({
     Details: [{ ItemName: '', Unit: '', Quantity: 0, UnitPrice: 0, DiscountRate: 0, Amount: 0, DebitAcc: '1561', CreditAcc: '331' }]
 });
 
+onMounted(async () => {
+    console.log('--- Khởi tạo dữ liệu và tự sinh mã số ---');
+
+    // 1. Tải danh mục khách hàng, hàng hóa
+    await vStore.fetchMetaData();
+
+
+
+    // 2. TỰ ĐỘNG ĐIỀN NGƯỜI MUA (Lấy từ localStorage)
+    voucher.value.BuyerName = getLoggedInUserName();
+
+    if (vStore.warehouses.length > 0 && !voucher.value.WarehouseId) {
+        voucher.value.WarehouseId = vStore.warehouses[0].id;
+    }
+    // 3. SINH MÃ TỰ ĐỘNG TRÊN FRONTEND
+    // Nếu chưa có số (đang tạo mới), thì sinh mã mới
+    if (voucher.value.DocumentNo === 'HDMH0001' || !voucher.value.DocumentNo) {
+        voucher.value.DocumentNo = generateFrontendVoucherNo('HDMH');
+    }
+
+    if (props.editId) {
+        // Nếu có ID, gọi API lấy chi tiết chứng từ đó
+        const data = await vStore.fetchVoucherById(props.editId);
+        // Đổ dữ liệu vào ref voucher
+        voucher.value = normalizeData(data);
+    } else {
+        // Nếu không có ID -> Đây là màn hình tạo mới (giữ nguyên logic cũ của bạn)
+        voucher.value.BuyerName = getLoggedInUserName();
+        generateDocumentNo();
+    }
+});
+
 const subTotal = computed(() => voucher.value.Details.reduce((sum, i) => sum + (Number(i.Amount) || 0), 0));
 const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val || 0);
 
 const handleUpdateTotals = () => {
-    voucher.value.TaxAmount = Math.round(subTotal.value * (Number(voucher.value.TaxRate || 0) / 100));
+    // 1. Tính tổng tiền hàng
+    const subTotal = voucher.value.Details.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
+    voucher.value.SubTotal = subTotal;
+
+    // 2. Tính tiền thuế
+    if (voucher.value.TaxRate !== null && voucher.value.TaxRate !== undefined) {
+        // Nếu có 1 mức thuế cố định -> Tự động tính theo %
+        voucher.value.TaxAmount = Math.round(subTotal * (voucher.value.TaxRate / 100));
+    } else {
+        // Nếu đa thuế suất -> Giữ nguyên số TaxAmount do AI đổ vào
+        voucher.value.TaxAmount = voucher.value.TaxAmount || 0;
+    }
+
+    // 3. Tổng thanh toán
+    voucher.value.TotalAmount = subTotal + (Number(voucher.value.TaxAmount) || 0);
 };
+
 watch(subTotal, handleUpdateTotals);
+
+// Theo dõi sự thay đổi của PartnerId trong object voucher
+watch(() => voucher.value.PartnerId, (newId) => {
+    console.log('Đã chọn PartnerId mới:', newId); // Log để kiểm tra ID có chạy vào đây không
+
+    if (newId) {
+        // Tìm đối tác trong danh sách store dựa trên id (chữ thường)
+        const selected = vStore.partners.find(p => p.id === newId);
+
+        if (selected) {
+            console.log('Đã tìm thấy đối tác:', selected);
+
+            // Gán giá trị từ đối tác vào form (Dùng chữ thường cho 'address' và 'taxCode')
+            voucher.value.Address = selected.address || '';
+            voucher.value.TaxCode = selected.taxCode || '';
+        }
+    } else {
+        // Nếu xóa chọn khách hàng thì xóa trắng địa chỉ và MST
+        voucher.value.Address = '';
+        voucher.value.TaxCode = '';
+    }
+});
 
 // Hàm demo: Nhận dữ liệu từ component OCR bắn sang và tự động điền vào Form
 // Hàm nhận dữ liệu từ component OCR bắn sang và tự động điền vào Form
 // Hàm nhận dữ liệu từ component OCR bắn sang và tự động điền vào Form
 const handleAutoFillFromAI = (scannedData) => {
-    // 1. Map dữ liệu chung (Master) - Cập nhật đúng key từ API (chữ thường)
+    // 1. Map dữ liệu chung
     if (scannedData.taxCode) voucher.value.TaxCode = scannedData.taxCode;
     if (scannedData.address) voucher.value.Address = scannedData.address;
     if (scannedData.documentNumber) voucher.value.DocumentNo = scannedData.documentNumber;
     if (scannedData.note) voucher.value.Description = scannedData.note;
-
-    // Cắt lấy phần ngày (VD: "2025-09-08T00:00:00" -> "2025-09-08")
     if (scannedData.documentDate) voucher.value.DocumentDate = scannedData.documentDate.split('T')[0];
 
-    // Map phần thuế
-    if (scannedData.vatRate !== undefined) voucher.value.TaxRate = scannedData.vatRate;
-    if (scannedData.vatAmount !== undefined) voucher.value.TaxAmount = scannedData.vatAmount;
+    // 2. Gán tổng tiền thuế quét được từ AI
+    if (scannedData.vatAmount !== undefined) {
+        voucher.value.TaxAmount = scannedData.vatAmount;
+    }
 
-    // 2. Map dữ liệu bảng chi tiết hàng hóa (Đổi 'Details' thành 'items')
+    // 3. Map chi tiết hàng hóa
     if (scannedData.items && scannedData.items.length > 0) {
-
         voucher.value.Details = scannedData.items.map(item => {
-            // Lấy dữ liệu từ key của API (chữ thường)
             const qty = Number(item.quantity) || 0;
             const price = Number(item.unitPrice) || 0;
-            const discount = Number(item.discountRate) || 0;
 
             return {
-                ItemName: item.itemName || '',      // API: itemName -> Vue: ItemName
-                Unit: item.unit || '',              // API: unit -> Vue: Unit
+                ItemName: item.itemName || '',
+                Unit: item.unit || 'Chiếc',
                 Quantity: qty,
                 UnitPrice: price,
-                DiscountRate: discount,
-                Amount: item.amount ? Number(item.amount) : Math.round(qty * price * (1 - discount / 100)),
+                DiscountRate: item.discountRate || 0, // Thuế suất dòng
+                Amount: item.amount || Math.round(qty * price),
                 DebitAcc: item.debitAccount || '1561',
                 CreditAcc: item.creditAccount || '331'
             };
         });
+
+        // 4. Logic hiển thị ô % thuế suất tổng
+        const uniqueRates = [...new Set(scannedData.items.map(i => i.discountRate).filter(r => r !== null))];
+
+        if (uniqueRates.length === 1) {
+            voucher.value.TaxRate = uniqueRates[0];
+        } else {
+            voucher.value.TaxRate = null; // Đa thuế suất -> Để trống ô %
+        }
     }
 
-    // 3. Gọi lại hàm tính tổng tiền
     handleUpdateTotals();
 };
+
+const getLoggedInUserName = () => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+        try {
+            const parsedUser = JSON.parse(userData);
+            // Theo ảnh của bạn, key lưu tên là 'username'
+            return parsedUser.username || 'Admin';
+        } catch (e) {
+            return 'Admin';
+        }
+    }
+    return '';
+};
+
+// Hàm sinh mã chứng từ tự động trên Frontend
+// Format: HDMH + YYMMDD + STT (ví dụ: HDMH26051301)
+const generateFrontendVoucherNo = (prefix = 'HDMH') => {
+    const now = new Date();
+
+    // Lấy 2 số cuối của năm (26), tháng (05), ngày (13)
+    const year = now.getFullYear().toString().slice(-2);
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+
+    // Tạo phần ngày tháng: 260513
+    const datePart = `${year}${month}${day}`;
+
+    // Số thứ tự ngẫu nhiên hoặc dựa trên thời gian (ví dụ: lấy giây và miligiây để tránh trùng trong phiên làm việc)
+    // Hoặc bạn có thể dùng một số đếm đơn giản
+    const randomPart = Math.floor(Math.random() * 999).toString().padStart(3, '0');
+
+    return `${prefix}${datePart}-${randomPart}`;
+};
+
+// Hàm xử lý lưu hóa đơn chuẩn theo Schema API
+const handleSave = async () => {
+    // 1. Kiểm tra các điều kiện bắt buộc trước khi lưu
+    if (!voucher.value.PartnerId) {
+        alert("Vui lòng chọn nhà cung cấp!");
+        return;
+    }
+    if (!voucher.value.WarehouseId) { alert("Vui lòng chọn kho hàng!"); return; }
+
+    // Kiểm tra danh sách hàng hóa
+    const hasValidItems = voucher.value.Details.some(item => item.ItemName && item.Quantity > 0);
+    if (!hasValidItems) {
+        alert("Vui lòng nhập ít nhất một mặt hàng với số lượng lớn hơn 0!");
+        return;
+    }
+
+    // 2. Đóng gói dữ liệu chuẩn theo DocumentCreateDto.cs và các thực thể Entities
+    const payload = {
+        // Khớp với thuộc tính 'Document' trong DocumentCreateDto
+        document: {
+            documentNo: voucher.value.DocumentNo,
+            docType: "PURCHASE",
+            // Chuyển đổi ngày sang định dạng ISO chuẩn cho .NET DateTime
+            documentDate: new Date(voucher.value.DocumentDate).toISOString(),
+            postingDate: new Date(voucher.value.DocumentDate).toISOString(),
+            partnerId: Number(voucher.value.PartnerId),
+            warehouseId: Number(voucher.value.WarehouseId),
+            // Tính tổng tiền bao gồm thuế
+            totalAmount: subTotal.value + (Number(voucher.value.TaxAmount) || 0),
+            description: voucher.value.Description || "",
+            status: 0, // Mặc định là 0 (Draft - Nháp) khi mới tạo
+        },
+        // Khớp với thuộc tính 'Lines' trong DocumentCreateDto (được đổi thành camelCase)
+        lines: voucher.value.Details
+            .filter(item => item.ItemName) // Chỉ lấy các dòng có tên hàng
+            .map(item => ({
+                itemId: item.ItemId || null, // ID hàng hóa từ danh mục
+                quantity: Number(item.Quantity) || 0,
+                unitPrice: Number(item.UnitPrice) || 0,
+                taxRate: Number(voucher.value.TaxRate) || 0,
+                description: item.ItemName // Diễn giải chi tiết cho từng dòng
+            }))
+    };
+
+    // 3. Thực thi gọi API qua Store
+    try {
+        console.log("%c [Payload] Gửi dữ liệu lưu xuống Backend:", "color: #007bff; font-weight: bold", payload);
+
+        const result = await vStore.createVoucher(payload);
+
+        if (result && result.success === true) {
+            alert("Lưu hóa đơn thành công! ID mới: " + result.data);
+            console.log("Dữ liệu đã nằm trong DB với ID:", result.data);
+        } else {
+            // Nếu success = false, hiển thị lỗi thực tế từ Backend
+            const errorMsg = result?.message || "Lỗi không xác định từ Server";
+            alert("Thất bại: " + errorMsg);
+            console.error("Chi tiết lỗi:", result);
+        }
+    } catch (error) {
+        // Xử lý lỗi chi tiết hơn nếu từ Axios trả về
+        const errorMsg = error.response?.data?.message || "Có lỗi xảy ra khi kết nối với máy chủ!";
+        console.error("Lỗi khi lưu chứng từ:", error);
+        alert(`Lỗi: ${errorMsg}`);
+    }
+};
+// hàm duyệt 
+const handleApprove = async () => {
+   const result = await vStore.postVoucher(voucher.value.id);
+   if (result.success) {
+      toast.success("Đã duyệt!");
+      emit('approved'); // Bắn tin cho Modal biết để quay về danh sách
+   }
+}
 </script>
 
 <style scoped>
@@ -201,6 +396,47 @@ const handleAutoFillFromAI = (scannedData) => {
 .btn-ai-assistant.active {
     background-color: #ff9800;
     color: white;
+}
+
+.full-form-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #f1f5f9;
+    /* Màu nền xám nhạt của app */
+    z-index: 10000;
+    /* Cao nhất để đè lên cả Modal cũ */
+    display: flex;
+    flex-direction: column;
+}
+
+.overlay-header {
+    background: #1e293b;
+    /* Màu tối chuyên nghiệp */
+    color: white;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-close-overlay {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.overlay-content {
+    flex: 1;
+    overflow-y: auto;
+    /* Cho phép cuộn form nếu dài */
+    padding: 20px;
 }
 </style>
 
@@ -300,17 +536,21 @@ const handleAutoFillFromAI = (scannedData) => {
 .btn-ai-assistant {
     color: white;
     padding: 10px 20px;
-    border-radius: 8px; /* Bo góc ngoài cùng */
+    border-radius: 8px;
+    /* Bo góc ngoài cùng */
     font-weight: 700;
     cursor: pointer;
     border: none;
     box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
-    z-index: 1; /* Để text và icon nằm lên trên pseudo-elements */
-    
+    z-index: 1;
+    /* Để text và icon nằm lên trên pseudo-elements */
+
     /* Thiết lập quan trọng cho hiệu ứng viền sáng */
     position: relative;
-    overflow: hidden; /* Cắt đi phần ánh sáng thừa bên ngoài */
-    background: transparent; /* Nền nút chính chuyển sang trong suốt để lộ lớp ::after */
+    overflow: hidden;
+    /* Cắt đi phần ánh sáng thừa bên ngoài */
+    background: transparent;
+    /* Nền nút chính chuyển sang trong suốt để lộ lớp ::after */
 }
 
 .btn-ai-assistant:hover {
@@ -322,10 +562,14 @@ const handleAutoFillFromAI = (scannedData) => {
 .btn-ai-assistant::after {
     content: '';
     position: absolute;
-    inset: 2px; /* Khoảng cách hở viền là 2px. Bạn có thể tăng/giảm số này để viền dày/mỏng hơn */
-    background: linear-gradient(90deg, #7e5eff 0%, #c565ff 100%); /* Màu chính của nút */
-    border-radius: 6px; /* Bo góc nhỏ hơn lớp ngoài (8px - 2px) */
-    z-index: -1; /* Nằm giữa text/icon và ánh sáng chạy */
+    inset: 2px;
+    /* Khoảng cách hở viền là 2px. Bạn có thể tăng/giảm số này để viền dày/mỏng hơn */
+    background: linear-gradient(90deg, #7e5eff 0%, #c565ff 100%);
+    /* Màu chính của nút */
+    border-radius: 6px;
+    /* Bo góc nhỏ hơn lớp ngoài (8px - 2px) */
+    z-index: -1;
+    /* Nằm giữa text/icon và ánh sáng chạy */
     transition: all 0.3s ease;
 }
 
@@ -335,25 +579,32 @@ const handleAutoFillFromAI = (scannedData) => {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 300%; /* Đảm bảo đủ rộng để khi xoay không bị hụt góc */
+    width: 300%;
+    /* Đảm bảo đủ rộng để khi xoay không bị hụt góc */
     height: 300%;
     /* Dải màu sáng: Trong suốt -> Trắng sáng -> Trong suốt */
-    background: conic-gradient(
-        from 0deg, 
-        transparent 0%, 
-        transparent 40%, 
-        rgba(255, 255, 255, 0.9) 50%, 
-        transparent 60%, 
-        transparent 100%
-    );
+    background: conic-gradient(from 0deg,
+            transparent 0%,
+            transparent 40%,
+            rgba(255, 255, 255, 0.9) 50%,
+            transparent 60%,
+            transparent 100%);
     transform: translate(-50%, -50%);
-    animation: spin-border 2.5s linear infinite; /* Tốc độ chạy của ánh sáng. LUÔN CHẠY */
-    z-index: -2; /* Đẩy ra sau cùng */
+    animation: spin-border 2.5s linear infinite;
+    /* Tốc độ chạy của ánh sáng. LUÔN CHẠY */
+    z-index: -2;
+    /* Đẩy ra sau cùng */
 }
+
 /* Keyframes cho ánh sáng xoay */
 @keyframes spin-border {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
+    0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
 }
 
 .btn-ai-assistant:hover::after {
@@ -384,23 +635,23 @@ const handleAutoFillFromAI = (scannedData) => {
 
 /* Trạng thái Active (Khi click mở/đóng) */
 .btn-ai-assistant.active {
-    box-shadow: 0 4px 15px rgba(126, 94, 255, 0.4); /* Đổi bóng đổ sang màu tím mờ */
+    box-shadow: 0 4px 15px rgba(126, 94, 255, 0.4);
+    /* Đổi bóng đổ sang màu tím mờ */
 }
+
 /* Đổi màu nền bên trong khi active */
 .btn-ai-assistant.active::after {
-    background: linear-gradient(90deg, #7e5eff 0%, #c565ff 100%); 
+    background: linear-gradient(90deg, #7e5eff 0%, #c565ff 100%);
 }
 
 /* Tuỳ chọn: Đổi màu ánh sáng chạy khi active (nhấn nhá thêm tông vàng cam) */
 .btn-ai-assistant.active::before {
-    background: conic-gradient(
-        from 0deg, 
-        transparent 0%, 
-        transparent 40%, 
-        rgba(255, 255, 255, 0.9) 50%, 
-        rgba(197, 101, 255, 0.6) 60%, 
-        transparent 100%
-    );
+    background: conic-gradient(from 0deg,
+            transparent 0%,
+            transparent 40%,
+            rgba(255, 255, 255, 0.9) 50%,
+            rgba(197, 101, 255, 0.6) 60%,
+            transparent 100%);
 }
 
 

@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://localhost:7047'; 
+
+const API_BASE_URL = 'https://localhost:7047';
 
 export const vouchersApi = {
-    // --- OCR (Bạn đã có) ---
+    // 1. OCR - Nhận diện hóa đơn
     scanOcrDocument: async (file, docType) => {
         const formData = new FormData();
         formData.append('file', file);
@@ -11,38 +12,85 @@ export const vouchersApi = {
         try {
             const response = await axios.post(`${API_BASE_URL}/api/ocr`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 180000 
+                timeout: 180000
             });
             return response.data;
         } catch (error) { throw error; }
     },
 
-    // --- LẤY DỮ LIỆU DANH MỤC (LOAD DATA) ---
+    // 2. LẤY DANH MỤC (Dựa trên Swagger của bạn)
+
+    // Lấy danh sách đối tác (Khách hàng/NCC)
     getPartners: async () => {
         const res = await axios.get(`${API_BASE_URL}/api/Partner`);
-        return res.data; // Giả sử trả về ServiceResult { data: [...] }
+        return res.data;
     },
 
+    // Lấy danh sách hàng hóa (Items)
     getProducts: async () => {
-        const res = await axios.get(`${API_BASE_URL}/api/Inventory/Products`);
+        // Trong hình của bạn là /api/Items
+        const res = await axios.get(`${API_BASE_URL}/api/Items`);
         return res.data;
     },
 
+    // Lấy danh sách tài khoản kế toán (Accounts)
     getAccounts: async () => {
-        const res = await axios.get(`${API_BASE_URL}/api/Account`);
+        // Trong hình của bạn là /api/accounts (có s)
+        const res = await axios.get(`${API_BASE_URL}/api/accounts`);
         return res.data;
     },
 
-    // --- NGHIỆP VỤ CHỨNG TỪ ---
-    generateVoucherCode: async (type) => {
-        // type có thể là 'HDMH', 'HDBH', 'PT', 'PC'
-        const res = await axios.get(`${API_BASE_URL}/api/Document/GenerateCode?type=${type}`);
+    // Lấy danh sách kho (Warehouse)
+    getWarehouses: async () => {
+        const res = await axios.get(`${API_BASE_URL}/api/Warehouse`);
         return res.data;
     },
 
+    // 3. NGHIỆP VỤ CHỨNG TỪ (DOCUMENTS)
+
+    // Lưu hóa đơn mới (Lưu nháp)
     saveVoucher: async (voucherData) => {
-        // voucherData bao gồm Header và danh sách chi tiết (Items/Details)
-        const res = await axios.post(`${API_BASE_URL}/api/Document`, voucherData);
+        // Trong hình của bạn là POST /api/documents (có s)
+        const res = await axios.post(`${API_BASE_URL}/api/documents`, voucherData);
+        return res.data;
+    },
+
+    // Ghi sổ chứng từ (Post) - Chuyển từ bản nháp sang chính thức
+    postVoucher: async (id) => {
+        // Trong hình của bạn là POST /api/documents/{id}/post
+        const res = await axios.post(`${API_BASE_URL}/api/documents/${id}/post`);
+        return res.data;
+    },
+
+    // 4. CÔNG NỢ & SỔ CÁI
+
+    // Lấy thông tin nợ theo đối tác
+    getDebtByPartner: async (partnerId) => {
+        const res = await axios.get(`${API_BASE_URL}/api/debt/${partnerId}`);
+        return res.data;
+    },
+
+    // Lấy dữ liệu sổ cái theo tài khoản
+    getLedgerByAccount: async (accountId) => {
+        const res = await axios.get(`${API_BASE_URL}/api/ledger/${accountId}`);
+        return res.data;
+    },
+
+    // 5. CHAT AI (Hỏi đáp dữ liệu)
+    askAi: async (question) => {
+        const res = await axios.post(`${API_BASE_URL}/api/Chat/ask`, { content: question });
+        return res.data;
+    },
+
+    // Lấy danh sách chờ duyệt cho Admin
+    getPendingVouchers: async () => {
+        const res = await axios.get(`${API_BASE_URL}/api/documents/pending`);
+        return res.data;
+    },
+
+    // Từ chối chứng từ
+    rejectVoucher: async (id) => {
+        const res = await axios.post(`${API_BASE_URL}/api/documents/${id}/reject`);
         return res.data;
     }
 };

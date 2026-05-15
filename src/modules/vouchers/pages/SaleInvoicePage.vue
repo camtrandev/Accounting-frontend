@@ -1,6 +1,7 @@
 <template>
     <div class="layout-wrapper" :class="{ 'is-split-mode': showAIAssistant }">
 
+        <!-- Panel Trợ lý AI (docType 1 cho Bán hàng) -->
         <div class="ocr-left-panel" v-if="showAIAssistant">
             <OcrInvoiceSplitView :docType="1" @close="showAIAssistant = false" @fill-data="handleAutoFillFromAI" />
         </div>
@@ -14,8 +15,12 @@
                     </div>
                 </div>
                 <div class="button-group">
-                    <button class="btn btn-outline"><i class="fas fa-print"></i> In hóa đơn</button>
-                    <button class="btn btn-primary"><i class="fas fa-save"></i> Lưu dữ liệu (F2)</button>
+                    <button class="btn btn-outline btn-print-custom">
+                        <i class="fas fa-print"></i> In hóa đơn
+                    </button>
+                    <button class="btn btn-primary" @click="handleSave">
+                        <i class="fas fa-save"></i> Lưu dữ liệu (F2)
+                    </button>
                     <button class="btn btn-ai-assistant" :class="{ 'active': showAIAssistant }"
                         @click="showAIAssistant = !showAIAssistant">
                         <span class="icon">✨</span>
@@ -25,7 +30,9 @@
             </header>
 
             <section class="card-container">
-                <VoucherPartnerInfo :model="voucher" :partners="listCustomers" />
+                <!-- VoucherPartnerInfo dùng cho Khách hàng và Kho xuất hàng -->
+                <VoucherPartnerInfo label="Khách hàng" :model="voucher" :partners="listCustomers"
+                    :warehouses="listWarehouses" />
 
                 <div class="master-extra-row">
                     <div class="field-group flex-3">
@@ -33,7 +40,7 @@
                         <div class="input-wrapper">
                             <i class="fas fa-map-marker-alt icon-inside"></i>
                             <input type="text" v-model="voucher.Address" class="input-premium"
-                                placeholder="Nhập địa chỉ đầy đủ của khách hàng..." />
+                                placeholder="Địa chỉ đầy đủ của khách hàng..." />
                         </div>
                     </div>
                     <div class="field-group flex-1">
@@ -41,12 +48,13 @@
                         <div class="input-wrapper">
                             <i class="fas fa-barcode icon-inside"></i>
                             <input type="text" v-model="voucher.TaxCode" class="input-premium"
-                                placeholder="Nhập MST..." />
+                                placeholder="MST khách hàng..." />
                         </div>
                     </div>
                 </div>
             </section>
 
+            <!-- Lưới chi tiết hàng hóa bán ra -->
             <SaleDetailTable :details="voucher.Details" @update-totals="handleUpdateTotals" />
 
             <div class="footer-layout">
@@ -66,19 +74,20 @@
 
                     <div class="summary-line">
                         <div class="tax-config">
-                            <span class="lbl">Thuế GTGT (</span>
-                            <input type="number" v-model.number="voucher.TaxRate" class="tax-rate-input"
-                                @input="handleUpdateTotals" placeholder="0" />
-                            <span class="lbl">%):</span>
+                            <!-- Tự động đổi chữ thành 'Tổng thuế' nếu hóa đơn có nhiều mức thuế khác nhau -->
+                            <span class="lbl">
+                                {{ voucher.TaxRate === null ? 'Tổng thuế:' : 'Thuế GTGT:' }}
+                            </span>
                         </div>
                         <div class="input-wrapper tax-amount-wrapper">
-                            <input type="number" v-model.number="voucher.TaxAmount" class="input-premium text-right"
-                                placeholder="0" />
+                            <!-- Giữ lại ô nhập số tiền thuế để hiển thị tổng tiền thuế từ AI hoặc tính toán -->
+                            <input type="number" v-model="voucher.TaxAmount" class="input-premium text-right"
+                                @input="handleUpdateTotals" />
                         </div>
                     </div>
 
                     <div class="summary-line grand-total">
-                        <span class="lbl-total">TỔNG THANH TOÁN:</span>
+                        <span class="lbl-total">TỔNG THANH TOÁN</span>
                         <span class="val-total">{{ formatVND(subTotal + (Number(voucher.TaxAmount) || 0)) }} VNĐ</span>
                     </div>
                 </div>
@@ -88,96 +97,203 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { useVouchersStore } from '../store/vouchers.store';
 import VoucherPartnerInfo from '../components/VoucherPartnerInfo.vue';
 import SaleDetailTable from '../components/SaleDetailTable.vue';
-import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue'; // Thêm import AI
+import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue';
 
-// Quản lý trạng thái mở/đóng AI
+const vStore = useVouchersStore();
 const showAIAssistant = ref(false);
 
-const listCustomers = ref([
-    { Id: 201, Name: 'Công ty TNHH Giải pháp Phần mềm ABC' },
-    { Id: 202, Name: 'Trường Đại học Y Hà Nội' }
-]);
+// Lấy dữ liệu từ Store
+const listCustomers = computed(() => vStore.partners);
+const listWarehouses = computed(() => vStore.warehouses);
 
 const voucher = ref({
-    DocumentNo: 'HDBH0001',
+    DocumentNo: '',
     PartnerId: null,
+    WarehouseId: null, // Kho xuất hàng
     BuyerName: '',
-    DocumentDate: new Date().toLocaleDateString('en-GB'),
+    DocumentDate: new Date().toISOString().substr(0, 10),
     Address: '',
     TaxCode: '',
     Description: '',
-    Details: [
-        { ItemName: '', Unit: '', Quantity: '', UnitPrice: '', DiscountRate: '', Amount: 0, RevenueAcc: '' }
-    ],
     TaxRate: 10,
-    TaxAmount: 0
+    TaxAmount: 0,
+    Details: [{ ItemName: '', Unit: '', Quantity: 0, UnitPrice: 0, DiscountRate: 0, Amount: 0, DebitAcc: '131', CreditAcc: '5111' }]
 });
 
-// Tính tổng tiền hàng
-const subTotal = computed(() => {
-    return voucher.value.Details.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
+onMounted(async () => {
+    await vStore.fetchMetaData();
+
+    // Tự động gán kho mặc định để tránh lỗi ID 1
+    if (vStore.warehouses.length > 0 && !voucher.value.WarehouseId) {
+        voucher.value.WarehouseId = vStore.warehouses[0].id;
+    }
+
+    if (!voucher.value.DocumentNo) {
+        voucher.value.DocumentNo = generateFrontendVoucherNo('HDBH');
+    }
 });
 
-// Hàm format tiền tệ
-const formatVND = (val) => {
-    if (!val) return "0";
-    return new Intl.NumberFormat('vi-VN').format(Math.round(val));
-};
+const subTotal = computed(() => voucher.value.Details.reduce((sum, i) => sum + (Number(i.Amount) || 0), 0));
+const formatVND = (val) => new Intl.NumberFormat('vi-VN').format(val || 0);
 
-// Cập nhật lại số tiền thuế khi có thay đổi
 const handleUpdateTotals = () => {
-    voucher.value.TaxAmount = Math.round(subTotal.value * (Number(voucher.value.TaxRate || 0) / 100));
+    // 1. Tính tổng tiền hàng
+    const subTotal = voucher.value.Details.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
+    voucher.value.SubTotal = subTotal;
+
+    // 2. Tính tiền thuế
+    if (voucher.value.TaxRate !== null && voucher.value.TaxRate !== undefined) {
+        // Nếu có 1 mức thuế cố định -> Tự động tính theo %
+        voucher.value.TaxAmount = Math.round(subTotal * (voucher.value.TaxRate / 100));
+    } else {
+        // Nếu đa thuế suất -> Giữ nguyên số TaxAmount do AI đổ vào
+        voucher.value.TaxAmount = voucher.value.TaxAmount || 0;
+    }
+
+    // 3. Tổng thanh toán
+    voucher.value.TotalAmount = subTotal + (Number(voucher.value.TaxAmount) || 0);
 };
 
-// Lắng nghe sự thay đổi của subTotal
 watch(subTotal, handleUpdateTotals);
 
-// Hàm nhận dữ liệu từ AI bắn sang
-// Hàm nhận dữ liệu từ AI bắn sang
+// Watcher tự động điền địa chỉ và MST khi chọn khách hàng
+watch(() => voucher.value.PartnerId, (newId) => {
+    if (newId) {
+        const selected = vStore.partners.find(p => p.id === newId);
+        if (selected) {
+            voucher.value.Address = selected.address || '';
+            voucher.value.TaxCode = selected.taxCode || '';
+        }
+    }
+});
+
+const handleSave = async () => {
+    // 1. Validate thông tin Header
+    if (!voucher.value.PartnerId) {
+        alert("Vui lòng chọn khách hàng!");
+        return;
+    }
+    if (!voucher.value.WarehouseId) {
+        alert("Vui lòng chọn kho xuất hàng!");
+        return;
+    }
+    if (!voucher.value.DocumentDate) {
+        alert("Vui lòng chọn ngày chứng từ!");
+        return;
+    }
+
+    // 2. Lọc và chuẩn bị danh sách hàng hóa (Bỏ các dòng trống)
+    const validLines = voucher.value.Details
+        .filter(item => item.ItemName && item.Quantity > 0)
+        .map(item => ({
+            itemId: item.ItemId || 0, // Đảm bảo có ID để Backend kiểm tra tồn kho
+            quantity: Number(item.Quantity) || 0,
+            unitPrice: Number(item.UnitPrice) || 0,
+            taxRate: Number(voucher.value.TaxRate) || 0,
+            description: item.ItemName
+        }));
+
+    if (validLines.length === 0) {
+        alert("Vui lòng nhập ít nhất một mặt hàng hợp lệ!");
+        return;
+    }
+
+    // 3. Xử lý định dạng ngày tháng (Chuyển từ DD/MM/YYYY sang ISO để Backend nhận diện đúng)
+    let formattedDate;
+    if (voucher.value.DocumentDate.includes('/')) {
+        const parts = voucher.value.DocumentDate.split('/');
+        formattedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString();
+    } else {
+        formattedDate = new Date(voucher.value.DocumentDate).toISOString();
+    }
+
+    // 4. Đóng gói Payload chuẩn
+    const payload = {
+        document: {
+            documentNo: voucher.value.DocumentNo,
+            docType: "SALE", // Nghiệp vụ bán hàng
+            documentDate: formattedDate,
+            postingDate: formattedDate,
+            partnerId: Number(voucher.value.PartnerId),
+            warehouseId: Number(voucher.value.WarehouseId),
+            totalAmount: subTotal.value + (Number(voucher.value.TaxAmount) || 0),
+            description: voucher.value.Description || "",
+            status: 1 // Trạng thái đã ghi sổ
+        },
+        lines: validLines
+    };
+
+    // 5. Gửi dữ liệu và xử lý phản hồi
+    try {
+        // Hiển thị trạng thái đang xử lý nếu cần (Loading)
+        const result = await vStore.createVoucher(payload);
+
+        if (result && result.success) {
+            alert("✅ Lưu hóa đơn bán hàng thành công!");
+            // Có thể thêm logic reset form hoặc chuyển về danh sách tại đây
+        } else {
+            // Hiển thị thông báo lỗi chi tiết (Ví dụ: "Không đủ tồn kho...")
+            alert("❌ Thất bại: " + (result.message || "Không thể lưu chứng từ"));
+        }
+    } catch (error) {
+        console.error("Save Error:", error);
+        alert("💥 Lỗi kết nối Server! Vui lòng kiểm tra lại đường truyền.");
+    }
+};
 const handleAutoFillFromAI = (scannedData) => {
-    // 1. Map dữ liệu chung (Master)
+    // 1. Map dữ liệu chung
     if (scannedData.taxCode) voucher.value.TaxCode = scannedData.taxCode;
     if (scannedData.address) voucher.value.Address = scannedData.address;
     if (scannedData.documentNumber) voucher.value.DocumentNo = scannedData.documentNumber;
     if (scannedData.note) voucher.value.Description = scannedData.note;
+    if (scannedData.documentDate) voucher.value.DocumentDate = scannedData.documentDate.split('T')[0];
 
-    // Xử lý ngày tháng: Cắt "2025-09-08T00:00:00" chuyển thành "08/09/2025"
-    if (scannedData.documentDate) {
-        const dateParts = scannedData.documentDate.split('T')[0].split('-');
-        if (dateParts.length === 3) {
-            voucher.value.DocumentDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-        }
+    // 2. Map tiền thuế tổng cộng (Dùng cho trường hợp đa thuế suất 8% + 10%)
+    if (scannedData.vatAmount !== undefined) {
+        voucher.value.TaxAmount = scannedData.vatAmount;
     }
 
-    // Map phần thuế
-    if (scannedData.vatRate !== undefined) voucher.value.TaxRate = scannedData.vatRate;
-    if (scannedData.vatAmount !== undefined) voucher.value.TaxAmount = scannedData.vatAmount;
-
-    // 2. Map dữ liệu bảng chi tiết hàng hóa
+    // 3. Map chi tiết hàng hóa
     if (scannedData.items && scannedData.items.length > 0) {
         voucher.value.Details = scannedData.items.map(item => {
             const qty = Number(item.quantity) || 0;
             const price = Number(item.unitPrice) || 0;
-            const discount = Number(item.discountRate) || 0;
 
             return {
                 ItemName: item.itemName || '',
-                Unit: item.unit || '',
+                Unit: item.unit || 'Chiếc',
                 Quantity: qty,
                 UnitPrice: price,
-                DiscountRate: discount,
-                Amount: item.amount ? Number(item.amount) : Math.round(qty * price * (1 - discount / 100)),
-                // Tài khoản doanh thu mặc định cho hóa đơn bán hàng thường là 5111
-                RevenueAcc: item.creditAccount || '5111'
+                // Đẩy thuế suất (8, 10) vào cột CK%
+                DiscountRate: item.discountRate || 0,
+                // Thành tiền không trừ chiết khấu vì DiscountRate đang đóng vai trò là Thuế suất
+                Amount: item.amount || Math.round(qty * price),
+                DebitAcc: item.debitAccount || '131',
+                CreditAcc: item.creditAccount || '5111'
             };
         });
+
+        // 4. Xử lý ô Thuế suất tổng ở phía dưới
+        const uniqueRates = [...new Set(scannedData.items.map(i => i.discountRate).filter(r => r !== null))];
+
+        if (uniqueRates.length === 1) {
+            voucher.value.TaxRate = uniqueRates[0]; // Chỉ có 1 loại thuế
+        } else {
+            voucher.value.TaxRate = null; // Nhiều loại thuế -> Để trống ô % để hiện "Tổng thuế"
+        }
     }
 
-    // 3. Gọi lại hàm tính tổng tiền
     handleUpdateTotals();
+};
+
+const generateFrontendVoucherNo = (prefix) => {
+    const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+    const randomPart = Math.floor(Math.random() * 999).toString().padStart(3, '0');
+    return `${prefix}${datePart}-${randomPart}`;
 };
 </script>
 

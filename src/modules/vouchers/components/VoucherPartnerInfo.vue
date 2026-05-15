@@ -3,12 +3,14 @@
         <div class="info-grid">
             <!-- Ô 1: Khách hàng -->
             <div class="field-group flex-2">
-                <label class="label-premium">Khách hàng</label>
+                <label class="label-premium">{{ $attrs.label || 'Khách hàng' }}</label>
                 <div class="input-wrapper">
                     <i class="fas fa-user-tie icon-inside"></i>
                     <select v-model="model.PartnerId" class="input-premium">
                         <option :value="null">-- Chọn khách hàng --</option>
-                        <option v-for="p in partners" :key="p.Id" :value="p.Id">{{ p.Name }}</option>
+                        <option v-for="p in partners" :key="p.id" :value="p.id">
+                            {{ p.partnerName }}
+                        </option>
                     </select>
                 </div>
             </div>
@@ -41,12 +43,27 @@
                         readonly />
                 </div>
             </div>
+
+            <!-- Ô 5: Kho hàng (MỚI THÊM) -->
+            <div class="field-group flex-1">
+                <label class="label-premium">Kho hàng</label>
+                <div class="input-wrapper">
+                    <i class="fas fa-warehouse icon-inside"></i>
+                    <select v-model="model.WarehouseId" class="input-premium">
+                        <option :value="null">-- Chọn kho --</option>
+                        <option v-for="w in warehouses" :key="w.id" :value="w.id">
+                            {{ w.warehouseName }}
+                        </option>
+                    </select>
+                </div>
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-defineProps(['model', 'partners']);
+// Thêm 'warehouses' vào props để nhận danh sách kho từ cha (PurchaseInvoicePage)
+defineProps(['model', 'partners', 'warehouses']);
 </script>
 
 <style scoped>
@@ -57,7 +74,8 @@ defineProps(['model', 'partners']);
 .info-grid {
     display: flex;
     gap: 16px;
-    /* Tạo khoảng cách giữa các ô - KHÔNG CÒN DÍNH NHAU */
+    flex-wrap: wrap;
+    /* Cho phép tự xuống hàng nếu màn hình quá hẹp */
 }
 
 .field-group {
@@ -68,10 +86,13 @@ defineProps(['model', 'partners']);
 
 .flex-1 {
     flex: 1;
+    min-width: 150px;
+    /* Đảm bảo ô không bị quá nhỏ */
 }
 
 .flex-2 {
     flex: 2;
+    min-width: 250px;
 }
 
 .label-premium {
@@ -94,11 +115,9 @@ defineProps(['model', 'partners']);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* HIỆU ỨNG NỔI LÊN KHI FOCUS */
 .input-wrapper:focus-within {
     border-color: #4f46e5;
     transform: translateY(-3px);
-    /* Nhấc ô lên một chút */
     box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.12), 0 4px 6px -2px rgba(79, 70, 229, 0.04);
 }
 
@@ -119,7 +138,6 @@ defineProps(['model', 'partners']);
     font-size: 14px;
 }
 
-/* Trạng thái chỉ đọc cho Số chứng từ */
 .input-wrapper.readonly {
     background: #f1f5f9;
     border-style: dashed;

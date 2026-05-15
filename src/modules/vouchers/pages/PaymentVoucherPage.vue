@@ -1,6 +1,6 @@
 <template>
     <div class="layout-wrapper" :class="{ 'is-split-mode': showAIAssistant }">
-
+        <!-- Panel AI trợ lý chứng từ -->
         <div class="ocr-left-panel" v-if="showAIAssistant">
             <OcrInvoiceSplitView :docType="3" @close="showAIAssistant = false" @fill-data="handleAutoFillFromAI" />
         </div>
@@ -14,8 +14,9 @@
                     </div>
                 </div>
                 <div class="button-group">
-                    <button class="btn btn-outline"><i class="fas fa-print"></i> In phiếu chi</button>
-                    <button class="btn btn-primary"><i class="fas fa-save"></i> Lưu phiếu (F2)</button>
+                    <button class="btn btn-outline" @click="handlePrint"><i class="fas fa-print"></i> In phiếu</button>
+                    <button class="btn btn-primary" @click="handleSave"><i class="fas fa-save"></i> Lưu phiếu
+                        (F2)</button>
                     <button class="btn btn-ai-assistant" :class="{ 'active': showAIAssistant }"
                         @click="showAIAssistant = !showAIAssistant">
                         <span class="icon">✨</span>
@@ -24,36 +25,45 @@
                 </div>
             </header>
 
-            <section class="card master-card">
-                <VoucherPartnerInfo :model="voucher" :partners="listPartners" />
+            <section class="card-container">
+                <!-- Thông tin đối tượng (Lấy từ store tương tự Phiếu Thu) -->
+                <VoucherPartnerInfo :model="voucher" :partners="listPartners" :warehouses="listWarehouses" />
 
                 <div class="master-extra-row">
-                    <div class="field-col flex-2">
-                        <label class="label-caps">Lý do chi</label>
-                        <input type="text" v-model="voucher.Reason" class="input-flat"
-                            placeholder="Ví dụ: Thanh toán tiền điện, trả tiền NCC..." />
+                    <div class="field-group flex-2">
+                        <label class="label-premium">Lý do chi</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-comment-dots icon-inside"></i>
+                            <input type="text" v-model="voucher.Reason" class="input-premium"
+                                placeholder="Ví dụ: Chi trả tiền nhà cung cấp, thanh toán lương..." />
+                        </div>
                     </div>
-                    <div class="field-col flex-1">
-                        <label class="label-caps">Kèm theo (Chứng từ gốc)</label>
-                        <input type="text" v-model="voucher.ReferenceDocs" class="input-flat"
-                            placeholder="Số hóa đơn, hợp đồng..." />
+                    <div class="field-group flex-1">
+                        <label class="label-premium">Kèm theo (Chứng từ gốc)</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-paperclip icon-inside"></i>
+                            <input type="text" v-model="voucher.ReferenceDocs" class="input-premium"
+                                placeholder="Số hóa đơn, hợp đồng..." />
+                        </div>
                     </div>
                 </div>
             </section>
 
+            <!-- Bảng hạch toán chi tiết -->
             <PaymentDetailTable :details="voucher.Details" />
 
             <div class="footer-layout">
-                <div class="note-card">
-                    <label>Số tiền bằng chữ:</label>
+                <div class="card-container note-card compact-card">
+                    <label class="label-premium">Số tiền bằng chữ</label>
                     <div class="words-box">
-                        <i>{{ readMoney(totalAmount) }} đồng.</i>
+                        <i class="fas fa-quote-left quote-icon"></i>
+                        <span class="money-text">{{ moneyInWords }}</span>
                     </div>
                 </div>
 
-                <div class="summary-card">
+                <div class="card-container summary-card compact-card">
                     <div class="summary-line grand-total">
-                        <span class="lbl-total">TỔNG TIỀN CHI:</span>
+                        <span class="lbl-total">TỔNG TIỀN CHI :</span>
                         <span class="val-total">{{ formatVND(totalAmount) }}</span>
                     </div>
                 </div>
@@ -63,73 +73,188 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useVouchersStore } from '../store/vouchers.store';
 import VoucherPartnerInfo from '../components/VoucherPartnerInfo.vue';
 import PaymentDetailTable from '../components/PaymentDetailTable.vue';
-import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue'; // Import component AI
+import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue';
+import { useToast } from "vue-toastification";
 
-// Trạng thái mở/đóng AI
+const vStore = useVouchersStore();
 const showAIAssistant = ref(false);
+const toast = useToast();
 
-const listPartners = ref([
-    { Id: 101, Name: 'Công ty CP Máy tính Phong Vũ' },
-    { Id: 901, Name: 'Nguyễn Văn B (Nhân viên hành chính)' }
-]);
-
+// --- 1. KHỞI TẠO DỮ LIỆU ---
 const voucher = ref({
-    DocumentNo: 'PC0001', // Thêm DocumentNo vào state để AI có thể map
+    DocumentNo: '',
     PartnerId: null,
-    DocumentDate: new Date().toLocaleDateString('en-GB'),
+    WarehouseId: null,
+    BuyerName: '', // Tên người nhận tiền
+    DocumentDate: new Date().toISOString().substr(0, 10),
     Reason: '',
     ReferenceDocs: '',
     Details: [
-        { Description: '', DebitAcc: '', CreditAcc: '', Amount: 0 }
+        { Description: '', DebitAcc: '331', CreditAcc: '1111', Amount: 0 }
     ]
 });
 
-// Tính tổng tiền chi
+
+const listPartners = computed(() => vStore.partners);
+const listWarehouses = computed(() => vStore.warehouses);
+
+onMounted(async () => {
+    await vStore.fetchMetaData();
+
+    if (!voucher.value.DocumentNo) {
+        generateDocumentNo();
+    }
+
+    if (listWarehouses.value.length > 0 && !voucher.value.WarehouseId) {
+        voucher.value.WarehouseId = listWarehouses.value[0].id;
+    }
+});
+
+const generateDocumentNo = () => {
+    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+    // Tiền tố PC cho Phiếu Chi
+    voucher.value.DocumentNo = `PC${dateStr}-${Math.floor(100 + Math.random() * 900)}`;
+};
+
+// --- 2. TÍNH TOÁN & ĐỊNH DẠNG ---
 const totalAmount = computed(() => {
     return voucher.value.Details.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 });
 
-// Hàm format tiền đính kèm "VNĐ"
+const moneyInWords = computed(() => {
+    return readVietnameseMoney(totalAmount.value);
+});
+
 const formatVND = (val) => {
-    return new Intl.NumberFormat('vi-VN').format(val) + ' VNĐ';
+    return new Intl.NumberFormat('vi-VN').format(val || 0) + ' đ';
 };
 
-// Hàm giả lập đọc số tiền bằng chữ
-const readMoney = (val) => {
-    if (val === 0) return "Không";
-    return "Mười lăm triệu năm trăm nghìn";
-};
+// --- 3. THUẬT TOÁN ĐỌC TIỀN CHUẨN ---
+function readVietnameseMoney(number) {
+    if (!number || number === 0) return "Không đồng";
+    const digits = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+    const units = ["", "nghìn", "triệu", "tỷ", "nghìn tỷ", "triệu tỷ"];
 
-// Xử lý dữ liệu AI trả về
-const handleAutoFillFromAI = (scannedData) => {
-    // Ánh xạ dữ liệu chung
-    if (scannedData.documentNumber) voucher.value.DocumentNo = scannedData.documentNumber;
-    if (scannedData.note) voucher.value.Reason = scannedData.note;
+    function readThreeDigits(n, showZero) {
+        let res = "";
+        let h = Math.floor(n / 100);
+        let t = Math.floor((n % 100) / 10);
+        let u = n % 10;
+        if (h > 0 || showZero) res += digits[h] + " trăm ";
+        if (t > 0) {
+            if (t === 1) res += "mười ";
+            else res += digits[t] + " mươi ";
+        } else if (h > 0 && u > 0) res += "lẻ ";
+        if (t > 0 && u === 1) res += "mốt";
+        else if (t > 1 && u === 5) res += "lăm";
+        else if (u > 0) res += digits[u];
+        return res.trim();
+    }
 
-    // Xử lý ngày tháng: "2025-09-08T00:00:00" -> "08/09/2025"
-    if (scannedData.documentDate) {
-        const dateParts = scannedData.documentDate.split('T')[0].split('-');
-        if (dateParts.length === 3) {
-            voucher.value.DocumentDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+    let res = "";
+    let unitIdx = 0;
+    let tempNum = Math.abs(number);
+    while (tempNum > 0) {
+        let block = tempNum % 1000;
+        if (block > 0) {
+            let sBlock = readThreeDigits(block, tempNum >= 1000);
+            res = sBlock + " " + units[unitIdx] + " " + res;
         }
+        tempNum = Math.floor(tempNum / 1000);
+        unitIdx++;
+    }
+    res = res.trim().charAt(0).toUpperCase() + res.trim().slice(1);
+    return res + " đồng chẵn.";
+}
+
+// --- 4. LOGIC LƯU DỮ LIỆU ---
+const handleSave = async () => {
+    if (!voucher.value.PartnerId) return toast.warning("Vui lòng chọn đối tượng nhận tiền!");
+    if (totalAmount.value <= 0) return toast.warning("Số tiền chi phải lớn hơn 0!");
+
+    const payload = {
+        document: {
+            documentNo: voucher.value.DocumentNo,
+            docType: "PAYMENT", // Đổi type thành PAYMENT
+            documentDate: new Date(voucher.value.DocumentDate).toISOString(),
+            partnerId: Number(voucher.value.PartnerId),
+            warehouseId: voucher.value.WarehouseId ? Number(voucher.value.WarehouseId) : null,
+            totalAmount: totalAmount.value,
+            description: voucher.value.Reason,
+            status: 1
+        },
+        lines: voucher.value.Details.map(line => ({
+            description: line.Description || voucher.value.Reason,
+            debitAcc: line.DebitAcc,
+            creditAcc: line.CreditAcc,
+            amount: Number(line.Amount)
+        }))
+    };
+
+    try {
+        const result = await vStore.createVoucher(payload);
+        if (result?.success) {
+            toast.success("✅ Lưu phiếu chi thành công!");
+        } else {
+            toast.error("❌ Lỗi: " + (result.message || "Không thể lưu"));
+        }
+    } catch (error) {
+        toast.error("💥 Lỗi kết nối hệ thống!");
+    }
+};
+
+// --- 5. HÀM TRỢ LÝ AI (Áp dụng mapping chi tiết hơn) ---
+const handleAutoFillFromAI = (scannedData) => {
+    if (scannedData.documentNumber) voucher.value.DocumentNo = scannedData.documentNumber;
+
+    if (scannedData.documentDate) {
+        voucher.value.DocumentDate = scannedData.documentDate.split('T')[0];
     }
 
-    // Map số tiền vào dòng đầu tiên của phiếu chi
-    if (scannedData.totalAmount !== undefined && voucher.value.Details.length > 0) {
-        voucher.value.Details[0].Amount = Number(scannedData.totalAmount);
-        voucher.value.Details[0].Description = scannedData.note || 'Chi tiền tự động từ AI';
-
-        // Mặc định tài khoản cho phiếu chi (Có 1111 - Tiền mặt)
-        voucher.value.Details[0].CreditAcc = '1111';
+    if (scannedData.reason || scannedData.note) {
+        voucher.value.Reason = scannedData.reason || scannedData.note;
     }
+
+    if (scannedData.attachedDocuments) {
+        voucher.value.ReferenceDocs = scannedData.attachedDocuments;
+    }
+
+    if (scannedData.targetName) {
+        voucher.value.BuyerName = scannedData.targetName;
+    }
+
+    // Xử lý chi tiết bảng
+    if (scannedData.details && scannedData.details.length > 0) {
+        voucher.value.Details = scannedData.details.map(item => ({
+            Description: item.description || scannedData.reason,
+            Amount: Number(item.amount) || 0,
+            // Ưu tiên tài khoản từ AI, nếu AI không trả về thì mới dùng mặc định
+            DebitAcc: item.debitAccount || '642',
+            CreditAcc: item.creditAccount || '1111'
+        }));
+    } else if (scannedData.totalAmount) {
+        // Trường hợp AI trả về tổng nhưng ko có mảng chi tiết
+        voucher.value.Details = [{
+            Description: scannedData.reason || 'Chi tiền tự động từ AI',
+            Amount: Number(scannedData.totalAmount),
+            DebitAcc: '642', // Mặc định chi phí nếu ko rõ
+            CreditAcc: '1111'
+        }];
+    }
+};
+
+const handlePrint = () => {
+    window.print();
 };
 </script>
 
 <style scoped>
-/* Khung bọc ngoài cùng */
+/* ================= THIẾT KẾ ĐỒNG NHẤT VỚI PHIẾU THU (THEME ĐỎ) ================= */
+
 .layout-wrapper {
     display: flex;
     width: 100%;
@@ -137,10 +262,8 @@ const handleAutoFillFromAI = (scannedData) => {
     transition: all 0.3s ease;
 }
 
-/* Nửa trái (AI OCR) */
 .ocr-left-panel {
     flex: 0 0 45%;
-    /* Chiếm 45% chiều rộng khi mở */
     max-width: 36%;
     background: #f8f9fa;
     border-radius: 8px;
@@ -148,54 +271,41 @@ const handleAutoFillFromAI = (scannedData) => {
     overflow: hidden;
 }
 
-/* Nửa phải (Form) - Mặc định chiếm 100% */
 .right-form-panel {
     flex: 1;
     min-width: 0;
-    /* Tránh vỡ layout khi flexbox bị ép nhỏ */
     transition: all 0.3s ease;
 }
 
-/* Điều chỉnh style form khi bị ép vào chế độ chia đôi (nếu cần) */
-.is-split-mode .master-extra-row {
-    flex-direction: column;
-    /* Rớt dòng nếu màn hình bên phải chật */
-}
-
-.btn-ai-assistant.active {
-    background-color: #ff9800;
-    color: white;
-}
-</style>
-
-<style scoped>
-/* ================= GLOBAL & LAYOUT ================= */
 .voucher-page {
-    padding: 20px 24px;
-    background-color: #f1f5f9;
+    padding: 16px 24px;
+    background: #f1f5f9;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    font-family: 'Inter', 'Segoe UI', sans-serif;
-    color: #1e293b;
+    gap: 16px;
+    font-family: 'Inter', sans-serif;
 }
 
-.card {
-    background: #fff;
-    border-radius: 8px;
+/* Card Container Premium */
+.card-container {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 10px;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
-/* ================= 1. HEADER ================= */
 .invoice-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: #fff;
-    padding: 16px 24px;
-    border-radius: 8px;
+    padding: 12px 20px;
+    border-radius: 10px;
     border: 1px solid #e2e8f0;
 }
 
@@ -203,92 +313,82 @@ const handleAutoFillFromAI = (scannedData) => {
     font-size: 20px;
     font-weight: 800;
     color: #0f172a;
-    margin: 0 0 4px 0;
+    margin: 0;
 }
 
-.sub-info {
-    font-size: 13px;
-    color: #64748b;
-    font-weight: 500;
-}
-
-/* Màu nhấn Đỏ/Rose cho Phiếu Chi */
+/* Màu chủ đạo Phiếu Chi: Đỏ/Rose */
 .highlight {
     color: #ef4444;
-    font-weight: 700;
+    font-weight: bold;
 }
 
-.btn {
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s;
-}
-
-.btn-primary {
-    background: #ef4444;
-    color: #fff;
-    border: none;
-    margin: 0 8px;
-}
-
-.btn-primary:hover {
-    background: #dc2626;
-}
-
-.btn-outline {
-    background: #fff;
-    border: 1px solid #cbd5e1;
-    color: #475569;
-}
-
-/* ================= 2. MASTER INFO ================= */
 .master-extra-row {
     display: flex;
-    border-top: 1px solid #e2e8f0;
-    background: #fcfcfc;
+    gap: 16px;
 }
 
-.field-col {
-    padding: 12px 20px;
+.field-group {
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #e2e8f0;
-}
-
-.field-col:last-child {
-    border-right: none;
-}
-
-.flex-2 {
-    flex: 2;
+    gap: 6px;
 }
 
 .flex-1 {
     flex: 1;
 }
 
-.btn-ai-assistant {
-    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.flex-2 {
+    flex: 2;
 }
 
-.btn-ai-assistant:hover {
+.label-premium {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.input-wrapper {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    transition: all 0.25s;
+}
+
+.input-wrapper:focus-within {
+    border-color: #ef4444;
+    /* Đỏ khi focus cho Phiếu Chi */
     transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(168, 85, 247, 0.35);
-    filter: brightness(1.1);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+}
+
+.input-premium {
+    width: 100%;
+    border: none;
+    outline: none;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: #1e293b;
+    background: transparent;
+}
+
+.icon-inside {
+    margin-left: 12px;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    font-size: 13px;
 }
 
 .button-group {
@@ -296,92 +396,67 @@ const handleAutoFillFromAI = (scannedData) => {
     gap: 10px;
 }
 
-.label-caps {
-    font-size: 11px;
-    font-weight: 700;
+.btn-primary {
+    background: #ef4444;
+    color: #fff;
+}
+
+.btn-outline {
+    background: #fff;
+    border: 1px solid #e2e8f0;
     color: #64748b;
-    text-transform: uppercase;
-    margin-bottom: 6px;
 }
 
-.input-flat {
-    border: none;
-    background: transparent;
-    font-size: 14px;
-    color: #0f172a;
-    outline: none;
-    width: 100%;
+.btn-ai-assistant {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
 }
 
-.input-flat::placeholder {
-    color: #94a3b8;
-    font-style: italic;
-}
-
-/* ================= 4. FOOTER ================= */
+/* Footer Layout */
 .footer-layout {
     display: grid;
-    grid-template-columns: 1fr 400px;
-    gap: 20px;
+    grid-template-columns: 1fr 420px;
+    gap: 16px;
 }
 
-.note-card {
-    background: #fff;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-}
-
-.note-card label {
-    font-size: 13px;
-    font-weight: 700;
-    color: #475569;
-    margin-bottom: 8px;
+.compact-card {
+    padding: 16px;
+    justify-content: center;
 }
 
 .words-box {
-    flex-grow: 1;
-    background-color: #fef2f2;
-    /* Nền đỏ nhạt đồng bộ theme */
-    border: 1px solid #fecaca;
-    border-radius: 6px;
-    padding: 12px;
-    font-size: 15px;
-    color: #b91c1c;
     display: flex;
     align-items: center;
-}
-
-/* KHỐI TỔNG TIỀN */
-.summary-card {
-    background: #fff;
+    gap: 10px;
+    background: #fff1f2;
+    /* Nền đỏ nhạt */
+    border: 1px dashed #fecaca;
+    padding: 10px 14px;
     border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    padding: 20px;
-    display: flex;
-    align-items: center;
+    color: #be123c;
 }
 
-.grand-total {
-    width: 100%;
-    display: flex;
-    justify-content: flex-end;
-    align-items: baseline;
-    gap: 16px;
-    margin: 0;
-}
-
-.lbl-total {
-    font-weight: 700;
-    color: #1e293b;
-    font-size: 16px;
+.money-text {
+    font-size: 14px;
+    font-weight: 500;
+    font-style: italic;
 }
 
 .val-total {
-    font-weight: 800;
-    color: #dc2626;
-    font-size: 26px;
+    font-size: 24px;
+    font-weight: 900;
+    color: #ef4444;
+    /* Tổng tiền màu đỏ */
+}
+
+.is-split-mode .master-extra-row {
+    flex-direction: column;
 }
 </style>

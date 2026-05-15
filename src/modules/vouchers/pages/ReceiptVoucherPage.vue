@@ -1,6 +1,6 @@
 <template>
     <div class="layout-wrapper" :class="{ 'is-split-mode': showAIAssistant }">
-
+        <!-- Panel AI trợ lý chứng từ -->
         <div class="ocr-left-panel" v-if="showAIAssistant">
             <OcrInvoiceSplitView :docType="2" @close="showAIAssistant = false" @fill-data="handleAutoFillFromAI" />
         </div>
@@ -14,8 +14,9 @@
                     </div>
                 </div>
                 <div class="button-group">
-                    <button class="btn btn-outline"><i class="fas fa-print"></i> In phiếu thu</button>
-                    <button class="btn btn-primary"><i class="fas fa-save"></i> Lưu phiếu (F2)</button>
+                    <button class="btn btn-outline" @click="handlePrint"><i class="fas fa-print"></i> In phiếu</button>
+                    <button class="btn btn-primary" @click="handleSave"><i class="fas fa-save"></i> Lưu phiếu
+                        (F2)</button>
                     <button class="btn btn-ai-assistant" :class="{ 'active': showAIAssistant }"
                         @click="showAIAssistant = !showAIAssistant">
                         <span class="icon">✨</span>
@@ -25,7 +26,8 @@
             </header>
 
             <section class="card-container">
-                <VoucherPartnerInfo :model="voucher" :partners="listPartners" />
+                <!-- Thông tin đối tượng (Lấy tự động từ listPartners) -->
+                <VoucherPartnerInfo :model="voucher" :partners="listPartners" :warehouses="listWarehouses" />
 
                 <div class="master-extra-row">
                     <div class="field-group flex-2">
@@ -47,6 +49,7 @@
                 </div>
             </section>
 
+            <!-- Bảng hạch toán chi tiết -->
             <ReceiptDetailTable :details="voucher.Details" />
 
             <div class="footer-layout">
@@ -54,7 +57,7 @@
                     <label class="label-premium">Số tiền bằng chữ</label>
                     <div class="words-box">
                         <i class="fas fa-quote-left quote-icon"></i>
-                        <span class="money-text">{{ readMoney(totalAmount) }} đồng.</span>
+                        <span class="money-text">{{ moneyInWords }}</span>
                     </div>
                 </div>
 
@@ -70,65 +73,204 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useVouchersStore } from '../store/vouchers.store'; // Giả định path store của bạn
 import VoucherPartnerInfo from '../components/VoucherPartnerInfo.vue';
 import ReceiptDetailTable from '../components/ReceiptDetailTable.vue';
-import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue'; // Import component AI
+import OcrInvoiceSplitView from '../components/OcrInvoiceSplitView.vue';
 
-// Quản lý trạng thái mở/đóng AI
+const vStore = useVouchersStore();
 const showAIAssistant = ref(false);
 
-const listPartners = ref([{ Id: 301, Name: 'Nguyễn Văn A (Khách hàng lẻ)' }]);
-
+// --- 1. KHỞI TẠO DỮ LIỆU ---
 const voucher = ref({
-    DocumentNo: 'PT0001',
+    DocumentNo: '',
     PartnerId: null,
+    WarehouseId: null, // Thêm kho theo yêu cầu của bạn
     BuyerName: '',
     DocumentDate: new Date().toISOString().substr(0, 10),
     Reason: '',
     ReferenceDocs: '',
     Details: [
-        { Description: '', DebitAcc: '', CreditAcc: '', Amount: 0 }
+        { Description: '', DebitAcc: '1111', CreditAcc: '131', Amount: 0 }
     ]
 });
 
+// Lấy dữ liệu từ Store
+const listPartners = computed(() => vStore.partners);
+const listWarehouses = computed(() => vStore.warehouses);
+
+onMounted(async () => {
+    // Gọi API lấy danh mục từ store
+    await vStore.fetchMetaData();
+
+    // Sinh mã chứng từ nếu chưa có
+    if (!voucher.value.DocumentNo) {
+        generateDocumentNo();
+    }
+
+    // Gán kho mặc định nếu có danh sách
+    if (listWarehouses.value.length > 0 && !voucher.value.WarehouseId) {
+        voucher.value.WarehouseId = listWarehouses.value[0].id;
+    }
+});
+
+const generateDocumentNo = () => {
+    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+    voucher.value.DocumentNo = `PT${dateStr}-${Math.floor(100 + Math.random() * 900)}`;
+};
+
+// --- 2. TÍNH TOÁN & ĐỊNH DẠNG ---
 const totalAmount = computed(() => {
     return voucher.value.Details.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 });
 
+const moneyInWords = computed(() => {
+    return readVietnameseMoney(totalAmount.value);
+});
+
 const formatVND = (val) => {
-    return new Intl.NumberFormat('vi-VN').format(val) + ' VNĐ';
+    return new Intl.NumberFormat('vi-VN').format(val || 0);
 };
 
-const readMoney = (val) => {
-    if (val === 0) return "Không";
-    // Ở đây bạn có thể gọi hàm convert số sang chữ thật
-    return "Năm triệu";
+// --- 3. THUẬT TOÁN ĐỌC TIỀN CHUẨN KẾ TOÁN ---
+function readVietnameseMoney(number) {
+    if (!number || number === 0) return "Không đồng";
+
+    const digits = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+    const units = ["", "nghìn", "triệu", "tỷ", "nghìn tỷ", "triệu tỷ"];
+
+    function readThreeDigits(n, showZero) {
+        let res = "";
+        let h = Math.floor(n / 100);
+        let t = Math.floor((n % 100) / 10);
+        let u = n % 10;
+
+        if (h > 0 || showZero) {
+            res += digits[h] + " trăm ";
+        }
+
+        if (t > 0) {
+            if (t === 1) res += "mười ";
+            else res += digits[t] + " mươi ";
+        } else if (h > 0 && u > 0) {
+            res += "lẻ ";
+        }
+
+        if (t > 0 && u === 1) res += "mốt";
+        else if (t > 1 && u === 5) res += "lăm";
+        else if (u > 0) res += digits[u];
+
+        return res.trim();
+    }
+
+    let res = "";
+    let unitIdx = 0;
+    let tempNum = Math.abs(number);
+
+    while (tempNum > 0) {
+        let block = tempNum % 1000;
+        if (block > 0) {
+            let sBlock = readThreeDigits(block, tempNum >= 1000);
+            res = sBlock + " " + units[unitIdx] + " " + res;
+        }
+        tempNum = Math.floor(tempNum / 1000);
+        unitIdx++;
+    }
+
+    res = res.trim().charAt(0).toUpperCase() + res.trim().slice(1);
+    return res + " đồng chẵn.";
+}
+
+// --- 4. LOGIC LƯU DỮ LIỆU ---
+const handleSave = async () => {
+    // Validate cơ bản
+    if (!voucher.value.PartnerId) return alert("Vui lòng chọn đối tượng nộp tiền!");
+    if (totalAmount.value <= 0) return alert("Số tiền phải lớn hơn 0!");
+
+    const payload = {
+        document: {
+            documentNo: voucher.value.DocumentNo,
+            docType: "RECEIPT",
+            documentDate: new Date(voucher.value.DocumentDate).toISOString(),
+            partnerId: Number(voucher.value.PartnerId),
+            warehouseId: voucher.value.WarehouseId ? Number(voucher.value.WarehouseId) : null,
+            totalAmount: totalAmount.value,
+            description: voucher.value.Reason,
+            status: 1
+        },
+        lines: voucher.value.Details.map(line => ({
+            description: line.Description || voucher.value.Reason,
+            debitAcc: line.DebitAcc,
+            creditAcc: line.CreditAcc,
+            amount: Number(line.Amount)
+        }))
+    };
+
+    try {
+        const result = await vStore.createVoucher(payload);
+        if (result && result.success) {
+            alert("✅ Lưu phiếu thu thành công!");
+        } else {
+            alert("❌ Lỗi: " + (result.message || "Không thể lưu"));
+        }
+    } catch (error) {
+        console.error("Save Error:", error);
+        alert("💥 Lỗi kết nối hệ thống!");
+    }
 };
 
-// Hàm nhận dữ liệu từ AI bắn sang để điền tự động
+// --- 5. HÀM TRỢ LÝ AI ---
 const handleAutoFillFromAI = (scannedData) => {
-    // Ánh xạ dữ liệu chung
-    if (scannedData.documentNumber) voucher.value.DocumentNo = scannedData.documentNumber;
-    if (scannedData.note) voucher.value.Reason = scannedData.note;
+    // --- PHẦN HEADER ---
+    if (scannedData.documentNumber) {
+        voucher.value.DocumentNo = scannedData.documentNumber; // "PT260515-322"
+    }
 
-    // Xử lý ngày tháng (nếu có)
     if (scannedData.documentDate) {
+        // Chuyển "2026-05-14T00:00:00" thành "2026-05-14"
         voucher.value.DocumentDate = scannedData.documentDate.split('T')[0];
     }
 
-    // Map số tiền vào dòng đầu tiên của phiếu thu
-    if (scannedData.totalAmount !== undefined && voucher.value.Details.length > 0) {
-        voucher.value.Details[0].Amount = Number(scannedData.totalAmount);
-        voucher.value.Details[0].Description = scannedData.note || 'Thu tiền tự động từ AI';
+    if (scannedData.reason) {
+        voucher.value.Reason = scannedData.reason;
+    }
 
-        // Mặc định tài khoản cho phiếu thu (Nợ 1111 - Tiền mặt)
-        voucher.value.Details[0].DebitAcc = '1111';
+    if (scannedData.attachedDocuments) {
+        voucher.value.ReferenceDocs = scannedData.attachedDocuments;
+    }
+
+    // Gán tên người nộp tiền (nếu component VoucherPartnerInfo có dùng trường này)
+    if (scannedData.targetName) {
+        voucher.value.BuyerName = scannedData.targetName; // "Nguyễn Văn An"
+    }
+
+    // --- PHẦN TABLE (CHI TIẾT) ---
+    if (scannedData.details && scannedData.details.length > 0) {
+        voucher.value.Details = scannedData.details.map(item => ({
+            description: item.description || scannedData.reason,
+            // Trong ảnh debitAccount/creditAccount đang là null, 
+            // nên gán mặc định nếu AI không nhận diện được
+            debitAccount: item.debitAccount || '1111',
+            creditAccount: item.creditAccount || '131',
+            amount: Number(item.amount) || 0
+        }));
     }
 };
 </script>
 
 <style scoped>
+.money-text {
+    font-style: italic;
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+.highlight {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
 /* Khung bọc ngoài cùng */
 .layout-wrapper {
     display: flex;

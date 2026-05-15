@@ -1,11 +1,11 @@
 <template>
   <div class="document-page">
-
-    <DocumentToolbar @create="handleCreateNew" @export="handleExportExcel" />
+    <DocumentToolbar :is-admin="isAdmin" :pending-count="pendingCount" @open-approval="openApprovalList"
+      @create="handleCreateNew" @export="handleExportExcel" />
 
     <div class="filter-section">
       <div class="search-box">
-        <input type="text" v-model="filters.search" placeholder="Tìm theo số chứng từ, đối tác..." />
+        <input type="text" v-model="filters.search" placeholder="Tìm theo số chứng từ..." />
       </div>
       <div class="filter-group">
         <select v-model="filters.type">
@@ -15,29 +15,38 @@
           <option value="RECEIPT">Phiếu thu</option>
           <option value="PAYMENT">Phiếu chi</option>
         </select>
-
-        <input type="date" v-model="filters.fromDate" title="Từ ngày" />
-        <input type="date" v-model="filters.toDate" title="Đến ngày" />
-
         <select v-model="filters.status">
           <option value="">Tất cả trạng thái</option>
           <option value="1">Đã ghi sổ</option>
           <option value="0">Bản nháp</option>
+          <option value="2">Chờ duyệt</option>
         </select>
       </div>
     </div>
 
     <DocumentTable :filters="filters" @edit="handleEdit" @delete="handleDelete" />
 
+    <ApprovalListModal v-if="showApprovalModal" :pending-list="vStore.pendingVouchers"
+      @close="showApprovalModal = false" @refresh="vStore.fetchPendingVouchers()" />
   </div>
 </template>
-
 <script setup>
-import { reactive } from 'vue';
+import { onMounted, computed, ref, reactive } from 'vue';
+import { useAuthStore } from '../../../stores/auth.store';
+import { useVouchersStore } from '../store/vouchers.store';
+import { useToast } from "vue-toastification";
 import DocumentToolbar from '../components/DocumentToolbar.vue';
 import DocumentTable from '../components/DocumentTable.vue';
+import ApprovalListModal from '../components/ApprovalListModal.vue';
+import { shallowRef, defineAsyncComponent } from 'vue';
 
-// Bộ lọc dữ liệu tập trung tại Page để dễ dàng quản lý API sau này
+
+const authStore = useAuthStore();
+const vStore = useVouchersStore();
+const toast = useToast();
+
+// --- STATE ---
+const showApprovalModal = ref(false);
 const filters = reactive({
   search: '',
   type: '',
@@ -46,23 +55,46 @@ const filters = reactive({
   toDate: ''
 });
 
+// --- COMPUTED ---
+const isAdmin = computed(() => authStore.userRole === 'Admin');
+// Dùng ?.length và || 0 để an toàn tuyệt đối, tránh trắng trang
+const pendingCount = computed(() => vStore.pendingVouchers?.length || 0);
+
+// --- LIFESTYLE ---
+onMounted(async () => {
+  try {
+    // Nếu là Admin thì mới đi lấy danh sách chờ duyệt
+    if (isAdmin.value) {
+      await vStore.fetchPendingVouchers();
+    }
+  } catch (error) {
+    console.error("Không thể tải danh sách chờ duyệt:", error);
+  }
+});
+
+// --- HANDLERS ---
+const openApprovalList = () => {
+  showApprovalModal.value = true;
+};
+
+
 const handleCreateNew = () => {
-  console.log("Mở Modal thêm mới chứng từ");
+  console.log("Mở form thêm mới");
+  // Thêm logic điều hướng hoặc mở modal thêm mới của bạn ở đây
 };
 
 const handleEdit = (doc) => {
-  console.log("Chỉnh sửa chứng từ:", doc);
+  console.log("Sửa chứng từ:", doc);
 };
 
 const handleDelete = (id) => {
   if (confirm("Bạn có chắc chắn muốn xóa chứng từ này?")) {
-    console.log("Xóa chứng từ ID:", id);
+    console.log("Đã xóa ID:", id);
   }
 };
 
 const handleExportExcel = () => {
-  console.log("Đang xuất dữ liệu ra Excel với bộ lọc:", filters);
-  alert("Hệ thống đang khởi tạo file Excel...");
+  toast.success("Hệ thống đang chuẩn bị tệp Excel...");
 };
 </script>
 
@@ -76,7 +108,6 @@ const handleExportExcel = () => {
   gap: 16px;
 }
 
-/* Style cho phần bộ lọc mới */
 .filter-section {
   display: flex;
   justify-content: space-between;
@@ -95,10 +126,12 @@ const handleExportExcel = () => {
   border-radius: 8px;
   width: 300px;
   outline: none;
+  transition: all 0.2s;
 }
 
 .search-box input:focus {
-  border-color: #5a67d8;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .filter-group {

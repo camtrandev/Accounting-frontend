@@ -6,14 +6,17 @@
         <p>Danh sách toàn bộ hóa đơn, phiếu thu, phiếu chi từ hệ thống</p>
       </div>
     </div>
-    
+
     <div class="header-actions">
-      <!-- Nút Xuất Excel: Cần thiết cho báo cáo thuế/nội bộ -->
+      <button v-if="isAdmin && pendingCount > 0" class="btn-notification-approve" @click="$emit('open-approval')">
+        <i class="fas fa-bell animate-swing"></i>
+        Bạn có <strong>{{ pendingCount }}</strong> chứng từ cần duyệt
+      </button>
+
       <button class="btn-secondary" @click="$emit('export')" title="Xuất danh sách ra file Excel">
         <span class="icon">📊</span> Xuất Excel
       </button>
 
-      <!-- Nút Thêm mới: Layout rõ ràng hơn -->
       <button class="btn-primary" @click="$emit('create')">
         <span class="icon">+</span> Thêm mới
       </button>
@@ -22,8 +25,20 @@
 </template>
 
 <script setup>
-// Khai báo các sự kiện bắn lên DocumentPage
-defineEmits(['create', 'open-ai', 'export']);
+// 1. Khai báo Props để nhận dữ liệu từ DocumentPage.vue
+defineProps({
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
+  pendingCount: {
+    type: Number,
+    default: 0
+  }
+});
+
+// 2. Khai báo các sự kiện bắn ngược lại cho cha
+defineEmits(['create', 'export', 'open-approval']);
 </script>
 
 <style scoped>
@@ -34,7 +49,7 @@ defineEmits(['create', 'open-ai', 'export']);
   background-color: #fff;
   padding: 20px 24px;
   border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 }
 
 .page-title h2 {
@@ -56,7 +71,71 @@ defineEmits(['create', 'open-ai', 'export']);
   align-items: center;
 }
 
-/* Nút phụ (Xuất Excel) */
+/* Nút thông báo duyệt (Màu Cam/Vàng nổi bật) */
+.btn-notification-approve {
+  background-color: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+}
+
+.btn-notification-approve:hover {
+  background-color: #ffedd5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.btn-notification-approve strong {
+  background: #f97316;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 99px;
+  margin: 0 2px;
+}
+
+/* Hiệu ứng rung chuông */
+.animate-swing {
+  animation: swing 2s infinite;
+  transform-origin: top center;
+}
+
+@keyframes swing {
+  0% {
+    transform: rotate(0);
+  }
+
+  10% {
+    transform: rotate(10deg);
+  }
+
+  20% {
+    transform: rotate(-10deg);
+  }
+
+  30% {
+    transform: rotate(6deg);
+  }
+
+  40% {
+    transform: rotate(-6deg);
+  }
+
+  50% {
+    transform: rotate(0);
+  }
+
+  100% {
+    transform: rotate(0);
+  }
+}
+
 .btn-secondary {
   background-color: #fff;
   color: #4a5568;
@@ -73,10 +152,8 @@ defineEmits(['create', 'open-ai', 'export']);
 
 .btn-secondary:hover {
   background-color: #f7fafc;
-  border-color: #cbd5e0;
 }
 
-/* Nút chính (Thêm mới) */
 .btn-primary {
   background-color: #4f46e5;
   color: white;
@@ -94,7 +171,6 @@ defineEmits(['create', 'open-ai', 'export']);
 .btn-primary:hover {
   background-color: #4338ca;
 }
-
 
 .icon {
   font-size: 16px;

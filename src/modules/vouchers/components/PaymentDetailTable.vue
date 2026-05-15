@@ -1,5 +1,5 @@
 <template>
-    <section class="card detail-card">
+    <section class="card-container detail-card">
         <div class="card-header-custom">
             <h2 class="table-title">Hạch toán chi tiết</h2>
         </div>
@@ -12,33 +12,36 @@
                         <th>Diễn giải chi tiết</th>
                         <th width="120">TK Nợ</th>
                         <th width="120">TK Có</th>
-                        <th width="180">Số tiền</th>
+                        <th width="200">Số tiền</th>
                         <th width="40"></th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="(item, index) in details" :key="index">
-                        <td class="text-center">{{ index + 1 }}</td>
+                        <td class="text-center index-col">{{ index + 1 }}</td>
 
-                        <td>
+                        <!-- Diễn giải: Sử dụng 'description' (chữ thường) để khớp với OCR -->
+                        <td class="cell-input">
                             <input type="text" v-model="item.Description" class="table-input"
-                                placeholder="Nhập diễn giải chi..." />
+                                placeholder="VD: Chi tiền trả nợ NCC..." />
                         </td>
 
-                        <td>
-                            <input type="text" v-model="item.DebitAcc" class="table-input text-center font-weight-bold"
-                                placeholder="Nợ..." />
+                        <!-- TK Nợ: Thường là 331, 642... khớp với 'debitAccount' -->
+                        <td class="cell-input">
+                            <input type="text" v-model="item.DebitAcc"
+                                class="table-input text-center font-weight-bold" placeholder="331" />
                         </td>
 
-                        <td>
-                            <input type="text" v-model="item.CreditAcc" class="table-input text-center font-weight-bold"
-                                placeholder="Có..." />
+                        <!-- TK Có: Thường là 1111 (Tiền mặt) khớp với 'creditAccount' -->
+                        <td class="cell-input">
+                            <input type="text" v-model="item.CreditAcc"
+                                class="table-input text-center font-weight-bold" placeholder="1111" />
                         </td>
 
-                        <td>
+                        <!-- Số tiền: Khớp với 'amount' -->
+                        <td class="cell-input">
                             <div class="amount-wrapper">
-                                <input type="number" v-model="item.Amount"
-                                    class="table-input text-right font-weight-bold text-highlight" placeholder="0" />
+                                <input type="number" v-model.number="item.Amount" class="table-input" placeholder="0" />
                                 <span class="currency-unit">VNĐ</span>
                             </div>
                         </td>
@@ -58,7 +61,6 @@
 </template>
 
 <script setup>
-// Nhận dữ liệu mảng Details từ trang cha truyền xuống
 const props = defineProps({
     details: {
         type: Array,
@@ -66,17 +68,21 @@ const props = defineProps({
     }
 });
 
-// Hàm thêm dòng
+/**
+ * Lưu ý quan trọng: 
+ * Các key (description, debitAccount, creditAccount, amount) 
+ * phải viết thường giống hệt như cách AI trả về để Vue nhận diện phản hồi (reactivity).
+ */
+
 const addRow = () => {
     props.details.push({
-        Description: '',
-        DebitAcc: '331',
-        CreditAcc: '1111',
-        Amount: 0
+        description: '',
+        debitAccount: '331', // Mặc định cho phiếu chi
+        creditAccount: '1111', // Mặc định tiền mặt
+        amount: 0
     });
 };
 
-// Hàm xóa dòng
 const removeRow = (index) => {
     if (props.details.length > 1) {
         props.details.splice(index, 1);
@@ -247,5 +253,69 @@ input[type=number]::-webkit-outer-spin-button {
 input[type=number] {
     appearance: textfield;
     -moz-appearance: textfield;
+}
+
+.amount-wrapper {
+    position: relative;
+    /* Quan trọng: Làm gốc tọa độ cho VNĐ */
+    display: flex;
+    align-items: center;
+    width: 100%;
+    /* Chuyển các thuộc tính của border và background từ input sang đây */
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 4px;
+    box-sizing: border-box;
+    transition: all 0.2s;
+    overflow: hidden;
+    /* Đảm bảo mọi thứ nằm gọn trong khung */
+}
+
+/* Thẻ input chính: Cần làm nó trở nên vô hình border và nền */
+.amount-wrapper .table-input {
+    flex: 1;
+    /* Chiếm hết không gian còn lại */
+    border: none;
+    /* Loại bỏ border của chính nó */
+    outline: none;
+    /* Loại bỏ outline khi focus */
+    background: transparent;
+    /* Nền trong suốt */
+    /* Padding-right cần đủ lớn để không chèn lên chữ VNĐ (ví dụ 45px) */
+    padding: 6px 45px 6px 8px;
+    text-align: right;
+    margin: 0;
+    width: 100%;
+    box-shadow: none;
+    /* Loại bỏ bóng của input */
+    /* text-highlight và các màu sắc số tiền đỏ đậm vẫn hoạt động trên input này */
+}
+
+/* Hiệu ứng khi di chuột hoặc click vào ô (áp dụng cho thẻ wrapper) */
+.amount-wrapper:hover,
+.amount-wrapper:focus-within {
+    border-color: #ef4444;
+    /* Thanh nhấn màu đỏ */
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
+}
+
+/* Chữ VNĐ: Cố định vị trí tuyệt đối bên trong wrapper */
+.amount-wrapper .currency-unit {
+    position: absolute;
+    right: 8px;
+    /* Cách lề phải wrapper 8px */
+    top: 50%;
+    transform: translateY(-50%);
+    /* Căn giữa chiều dọc hoàn hảo */
+    color: #64748b;
+    font-size: 12px;
+    /* Kích thước nhỏ hơn một chút cho tinh tế */
+    font-weight: 600;
+    white-space: nowrap;
+    /* Không bao giờ xuống dòng */
+    margin: 0;
+    /* Xóa margin cũ */
+    pointer-events: none;
+    /* Đảm bảo khi click vào chữ VNĐ thì vẫn là click vào input */
 }
 </style>

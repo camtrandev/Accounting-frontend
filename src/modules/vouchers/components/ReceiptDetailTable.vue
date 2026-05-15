@@ -20,34 +20,33 @@
                     <tr v-for="(item, index) in details" :key="index">
                         <td class="text-center index-col">{{ index + 1 }}</td>
 
-                        <!-- Cột Diễn giải -->
+                        <!-- Cột Diễn giải: Khớp với 'description' trong JSON -->
                         <td class="cell-input">
-                            <input type="text" v-model="item.Description" class="table-input"
-                                placeholder="VD: Thu tiền nợ hóa đơn HD001..." />
+                            <input type="text" v-model="item.description" class="table-input"
+                                placeholder="VD: Thu tiền nợ hóa đơn..." />
                         </td>
 
-                        <!-- Cột TK Nợ -->
+                        <!-- Cột TK Nợ: Khớp với 'debitAccount' -->
                         <td class="cell-input">
-                            <input type="text" v-model="item.DebitAcc" class="table-input text-center font-weight-bold"
-                                placeholder="1111" />
+                            <input type="text" v-model="item.debitAccount"
+                                class="table-input text-center font-weight-bold" placeholder="1111" />
                         </td>
 
-                        <!-- Cột TK Có -->
+                        <!-- Cột TK Có: Khớp với 'creditAccount' -->
                         <td class="cell-input">
-                            <input type="text" v-model="item.CreditAcc" class="table-input text-center font-weight-bold"
-                                placeholder="131" />
+                            <input type="text" v-model="item.creditAccount"
+                                class="table-input text-center font-weight-bold" placeholder="131" />
                         </td>
 
-                        <!-- Cột Số tiền (kèm đơn vị VNĐ) -->
+                        <!-- Cột Số tiền: Khớp với 'amount' -->
                         <td class="cell-input">
                             <div class="amount-wrapper-table">
-                                <input type="number" v-model.number="item.Amount"
+                                <input type="number" v-model.number="item.amount"
                                     class="inner-input text-right font-weight-bold text-highlight" placeholder="0" />
                                 <span class="currency-label">VNĐ</span>
                             </div>
                         </td>
 
-                        <!-- Nút Xóa -->
                         <td class="text-center text-danger cursor-pointer" @click="removeRow(index)">
                             <span title="Xóa dòng" class="delete-icon">✕</span>
                         </td>
