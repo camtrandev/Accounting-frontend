@@ -9,17 +9,9 @@
 
     <LedgerToolbar @onFilter="handleFilter" @onExport="handleExport" />
 
-    <LedgerTable 
-      :data="ledgerEntries" 
-      :loading="isLoading" 
-      @viewDetail="openDetailModal" 
-    />
+    <LedgerTable :data="ledgerEntries" :loading="isLoading" @viewDetail="openDetailModal" />
 
-    <LedgerDetailModal 
-      v-if="isModalOpen" 
-      :detailData="selectedEntry" 
-      @close="isModalOpen = false" 
-    />
+    <LedgerDetailModal v-if="isModalOpen" :detailData="selectedEntry" @close="isModalOpen = false" />
   </div>
 </template>
 
@@ -68,11 +60,13 @@ onMounted(() => fetchLedgerData());
   background-color: #f8f9fa;
   min-height: 100vh;
 }
+
 .ledger-header h1 {
   font-size: 1.5rem;
   color: #1a1a1a;
   margin-bottom: 4px;
 }
+
 .subtitle {
   color: #6c757d;
   font-size: 0.9rem;
