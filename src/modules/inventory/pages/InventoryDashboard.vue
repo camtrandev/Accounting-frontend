@@ -1,12 +1,125 @@
+<script setup>
+// Bổ sung thêm 'ref' vào import
+import { onMounted, computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useInventoryStore } from '../store/inventory.store'
+import InventoryQuickActions from '../components/InventoryQuickActions.vue'
+import InventoryFilter from '../components/InventoryFilter.vue'
+import InventoryTable from '../components/InventoryTable.vue'
+
+const router = useRouter()
+const inventoryStore = useInventoryStore()
+
+// Lưu lại trạng thái filter hiện tại để dùng khi chuyển trang
+const currentFilters = ref({})
+
+// Lấy dữ liệu từ Store
+const tableData = computed(() => inventoryStore.documents)
+const isLoading = computed(() => inventoryStore.isLoading)
+const pagination = computed(() => inventoryStore.pagination)
+
+// 1. Hàm gọi API Lấy dữ liệu
+const fetchInventoryData = async (filters = {}) => {
+  currentFilters.value = filters
+
+  const params = {
+    page: filters.page || 1,
+    pageSize: filters.pageSize || 10,
+    search: filters.searchText || '',  
+    type: filters.voucherType || ''    
+  }
+  
+  await inventoryStore.fetchDocuments(params)
+}
+
+// 2. Chuyển trang
+const handlePageChange = (newPage) => {
+  fetchInventoryData({ 
+    ...currentFilters.value, 
+    page: newPage 
+  })
+}
+
+// 3. Hàm Xử lý Xuất Excel (Xử lý tải file Blob chuẩn)
+// 3. Hàm Xử lý Xuất Excel
+const handleExportData = async (exportData) => {
+  try {
+    console.log("Hệ thống đang xuất file Excel...");
+    
+    // SỬA LỖI Ở ĐÂY: Lấy đúng fromDate, toDate, warehouseId từ Modal gửi lên
+    const params = {
+      fromDate: exportData.fromDate || '', // Nếu để trống sẽ gửi chuỗi rỗng
+      toDate: exportData.toDate || '',     // Nếu để trống sẽ gửi chuỗi rỗng
+      warehouseId: exportData.warehouseId || '' // Nếu không chọn kho sẽ gửi chuỗi rỗng
+    };
+
+    // Gọi API thông qua store
+    const response = await inventoryStore.exportExcel(params);
+
+    // Xử lý tạo link tải file ảo từ dữ liệu Blob
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Đặt tên file động theo thời gian hiện tại
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `BaoCao_Kho_${dateStr}.xlsx`);
+    
+    document.body.appendChild(link);
+    link.click();
+    
+    // Dọn dẹp DOM
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error("Lỗi xuất Excel:", error);
+    alert("Không thể tải file Excel. Vui lòng thử lại!");
+  }
+}
+
+// 4. Mở trang Sửa
+const handleEditVoucher = (voucher) => {
+  router.push({
+    path: `/inventory/${voucher.type}/edit/${voucher.id}`
+  })
+}
+
+// 5. Xử lý Xóa chứng từ
+const handleDeleteVoucher = async (voucher) => {
+  if (confirm(`Bạn có chắc chắn muốn xóa chứng từ ${voucher.voucherNumber}? Hành động này không thể hoàn tác!`)) {
+    try {
+      // Gọi hành động xóa từ store
+      await inventoryStore.deleteDocument(voucher.id);
+      
+      // Xóa thành công thì load lại dữ liệu ở đúng trang hiện tại
+      await fetchInventoryData({ 
+        ...currentFilters.value, 
+        page: pagination.value.page 
+      });
+      
+    } catch (error) {
+      console.error('Lỗi khi xóa:', error);
+      alert('Có lỗi xảy ra khi xóa chứng từ. Vui lòng kiểm tra lại!');
+    }
+  }
+}
+
+// 6. Mở trang Thêm mới
+const createNewReceipt = () => {
+  router.push({ name: 'InventoryReceiptCreate' })
+}
+
+onMounted(async () => {
+  await fetchInventoryData()
+  await inventoryStore.fetchMetadata()
+})
+</script>
+
 <template>
   <div class="inventory-dashboard-container">
     <div class="page-header">
       <h2 class="page-title">Quản lý Kho</h2>
-      <div class="header-actions">
-        <button class="btn-primary" @click="createNewReceipt">
-          <i class="fas fa-plus"></i> Thêm Phiếu Nhập
-        </button>
-      </div>
     </div>
 
     <div class="section-container">
@@ -14,52 +127,22 @@
     </div>
 
     <div class="section-container data-section">
-      <InventoryFilter @search="fetchInventoryData" />
+      <InventoryFilter 
+        @search="fetchInventoryData" 
+        @export="handleExportData" 
+      />
 
-      <InventoryTable :items="tableData" :is-loading="isLoading" @edit="handleEditVoucher" />
+      <InventoryTable 
+        :items="tableData" 
+        :pagination="pagination" 
+        :is-loading="isLoading" 
+        @edit="handleEditVoucher"
+        @delete="handleDeleteVoucher" 
+        @page-change="handlePageChange" 
+      />
     </div>
   </div>
 </template>
-
-<script setup>
-import { ref, onMounted } from 'vue'
-import InventoryQuickActions from '../components/InventoryQuickActions.vue'
-import InventoryFilter from '../components/InventoryFilter.vue'
-import InventoryTable from '../components/InventoryTable.vue'
-
-const tableData = ref([])
-const isLoading = ref(false)
-
-// Hàm giả lập gọi API (Sau này thay bằng axios gọi lên backend C# .NET)
-const fetchInventoryData = async (filters) => {
-  console.log('Đang lấy dữ liệu với bộ lọc:', filters)
-  isLoading.value = true
-
-  // Giả lập delay mạng 1 giây
-  setTimeout(() => {
-    tableData.value = [
-      { id: 1, date: '2026-04-21', voucherNumber: 'NK-2604-001', type: 'receipt', description: 'Nhập linh kiện cho dự án MinePhone', totalAmount: 45000000, isPosted: true },
-      { id: 2, date: '2026-04-20', voucherNumber: 'XK-2604-001', type: 'issue', description: 'Xuất bán máy tính cho khách hàng Tuấn', totalAmount: 12500000, isPosted: false },
-      { id: 3, date: '2026-04-18', voucherNumber: 'CK-2604-001', type: 'transfer', description: 'Chuyển hàng từ kho Tổng sang kho Cửa hàng', totalAmount: 8500000, isPosted: true }
-    ]
-    isLoading.value = false
-  }, 1000)
-}
-
-const handleEditVoucher = (voucher) => {
-  console.log('Sửa chứng từ:', voucher.voucherNumber)
-}
-
-onMounted(() => {
-  // Lấy dữ liệu lần đầu khi trang vừa load xong
-  fetchInventoryData({})
-})
-
-const createNewReceipt = () => {
-  router.push({ name: 'InventoryReceiptCreate' })
-}
-
-</script>
 
 <style scoped>
 .inventory-dashboard-container {

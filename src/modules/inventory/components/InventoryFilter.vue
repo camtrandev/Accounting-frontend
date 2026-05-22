@@ -3,67 +3,136 @@
     <div class="search-group">
       <div class="input-icon">
         <i class="fas fa-search"></i>
-        <input 
-          v-model="filterParams.keyword" 
-          type="text" 
-          placeholder="Tìm theo số chứng từ, đối tượng..."
-          @keyup.enter="handleSearch"
-        />
+        <input v-model="filterParams.searchText" type="text" placeholder="Tìm theo số chứng từ, đối tượng..."
+          @keyup.enter="handleSearch" />
       </div>
     </div>
 
     <div class="filter-actions">
       <select v-model="filterParams.period" class="select-box" @change="handleSearch">
-        <option value="this_month">Tháng này</option>
+        <option value="last_7_days">7 ngày qua</option>
+        <option value="last_31_days">31 ngày qua</option>
         <option value="last_month">Tháng trước</option>
+        <option value="last_3_months">3 tháng trước</option>
         <option value="this_year">Năm nay</option>
-        <option value="custom">Tùy chọn...</option>
       </select>
 
       <select v-model="filterParams.voucherType" class="select-box" @change="handleSearch">
-        <option value="all">Tất cả chứng từ</option>
+        <option value="">Tất cả chứng từ</option>
         <option value="receipt">Phiếu Nhập kho</option>
         <option value="issue">Phiếu Xuất kho</option>
         <option value="transfer">Phiếu Chuyển kho</option>
       </select>
 
-      <button class="btn-outline" @click="resetFilter">
+      <button class="btn-outline" @click="resetFilter" title="Xóa bộ lọc">
         <i class="fas fa-undo"></i> Đặt lại
       </button>
+
       <button class="btn-primary" @click="handleSearch">
         Lọc dữ liệu
       </button>
+
+      <button class="btn-export" @click="isExportModalOpen = true" title="Tải báo cáo Excel">
+        <i class="fas fa-file-excel"></i> Xuất Excel
+      </button>
     </div>
+
+    <ExportInventoryReportModal :isOpen="isExportModalOpen" :warehouseList="warehouses"
+      @close="isExportModalOpen = false" @confirmExport="handleConfirmExport" />
   </div>
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
+import ExportInventoryReportModal from './ExportInventoryReportModal.vue'
+import { useInventoryStore } from '../store/inventory.store'
 
-// Khai báo sự kiện (Emit) để báo cho component cha biết khi nào cần gọi API
-const emit = defineEmits(['search'])
 
-// Trạng thái bộ lọc nội bộ
-const filterParams = reactive({
-  keyword: '',
-  period: 'this_month',
-  voucherType: 'all'
-})
+const inventoryStore = useInventoryStore()
+// Chỉ giữ lại emit search vì logic export hiện do Modal đảm nhiệm gọi API
+const emit = defineEmits(['search', 'export'])
 
-// Hàm kích hoạt tìm kiếm
-const handleSearch = () => {
-  // Bắn dữ liệu (payload) lên cho cha
-  emit('search', { ...filterParams })
+// Quản lý trạng thái đóng/mở form
+const isExportModalOpen = ref(false)
+
+const warehouses = computed(() => inventoryStore.warehouses)
+
+// Hàm này chạy khi bấm "Xác nhận tải" ở Modal
+const handleConfirmExport = (formDataFromModal) => {
+  isExportModalOpen.value = false; // Đóng modal đi
+  emit('export', formDataFromModal); // Bắn dữ liệu lên Dashboard
 }
 
-// Hàm làm sạch bộ lọc
+// Hàm hỗ trợ format ngày chuẩn YYYY-MM-DD để gửi xuống Backend API
+const formatDate = (date) => {
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+// Hàm tính toán khoảng thời gian
+const getDateRange = (period) => {
+  const today = new Date()
+  let fromDate = new Date()
+  let toDate = new Date() // Mặc định toDate là hôm nay
+
+  switch (period) {
+    case 'last_7_days':
+      fromDate.setDate(today.getDate() - 7)
+      break
+    case 'last_31_days':
+      fromDate.setDate(today.getDate() - 31)
+      break
+    case 'last_month':
+      // Ngày đầu tiên của tháng trước
+      fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      // Ngày cuối cùng của tháng trước (truyền 0 vào ngày của tháng hiện tại)
+      toDate = new Date(today.getFullYear(), today.getMonth(), 0)
+      break
+    case 'last_3_months':
+      // Tính lùi lại đúng 3 tháng từ ngày hôm nay
+      fromDate.setMonth(today.getMonth() - 3)
+      break
+    case 'this_year':
+      // Mùng 1 tháng 1 của năm nay
+      fromDate = new Date(today.getFullYear(), 0, 1)
+      break
+    default:
+      break
+  }
+
+  return {
+    fromDate: formatDate(fromDate),
+    toDate: formatDate(toDate)
+  }
+}
+
+const filterParams = reactive({
+  searchText: '',
+  period: 'last_7_days',
+  voucherType: ''
+})
+
+const handleSearch = () => {
+  const dateRange = getDateRange(filterParams.period)
+  
+  emit('search', { 
+    ...filterParams,
+    fromDate: dateRange.fromDate,
+    toDate: dateRange.toDate
+  })
+}
+
 const resetFilter = () => {
-  filterParams.keyword = ''
-  filterParams.period = 'this_month'
-  filterParams.voucherType = 'all'
+  filterParams.searchText = ''
+  filterParams.period = 'last_7_days'
+  filterParams.voucherType = ''
   handleSearch()
 }
 </script>
+
 
 <style scoped>
 .filter-wrapper {
@@ -90,6 +159,21 @@ const resetFilter = () => {
   position: absolute;
   left: 12px;
   color: #9ca3af;
+}
+
+.btn-export {
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0 20px;
+  height: 40px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-export:hover {
+  opacity: 0.9;
 }
 
 .input-icon input {
@@ -137,7 +221,10 @@ const resetFilter = () => {
   cursor: pointer;
   font-weight: 500;
 }
-.btn-primary:hover { background-color: #6d28d9; }
+
+.btn-primary:hover {
+  background-color: #6d28d9;
+}
 
 .btn-outline {
   background-color: transparent;
@@ -151,5 +238,8 @@ const resetFilter = () => {
   align-items: center;
   gap: 6px;
 }
-.btn-outline:hover { background-color: #f3f4f6; }
+
+.btn-outline:hover {
+  background-color: #f3f4f6;
+}
 </style>

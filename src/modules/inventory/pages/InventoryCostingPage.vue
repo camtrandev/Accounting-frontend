@@ -1,5 +1,13 @@
 <template>
     <div class="inventory-form-container">
+        <div v-if="isProcessing" class="loading-overlay">
+            <div class="spinner">
+                <i class="fas fa-circle-notch fa-spin"></i>
+            </div>
+            <h2>Hệ thống đang xử lý giá vốn...</h2>
+            <p>Vui lòng không đóng trình duyệt hoặc làm mới trang!</p>
+        </div>
+
         <div class="form-header">
             <div class="header-left">
                 <button class="btn-back" @click="goBack"><i class="fas fa-arrow-left"></i> Quay lại</button>
@@ -17,12 +25,12 @@
             <div class="costing-form">
                 <div class="form-row">
                     <label>Kỳ tính giá <span class="required">*</span></label>
-                    <input type="month" v-model="period" class="input-box" />
+                    <input type="month" v-model="period" class="input-box" :disabled="isProcessing" />
                 </div>
 
                 <div class="form-row">
                     <label>Phương pháp tính <span class="required">*</span></label>
-                    <select v-model="method" class="input-box">
+                    <select v-model="method" class="input-box" :disabled="isProcessing">
                         <option value="BGGQ_CUOIKY">Bình quân gia quyền cuối kỳ (Phổ biến nhất)</option>
                         <option value="BGGQ_LIENTUC">Bình quân gia quyền liên tục</option>
                         <option value="FIFO">Nhập trước Xuất trước (FIFO)</option>
@@ -32,7 +40,7 @@
                 <div class="action-area">
                     <button class="btn-run" @click="runCosting" :disabled="isProcessing">
                         <i class="fas fa-cogs" :class="{ 'fa-spin': isProcessing }"></i>
-                        {{ isProcessing ? 'Hệ thống đang xử lý, vui lòng đợi...' : 'Thực hiện Tính Giá' }}
+                        {{ isProcessing ? 'Đang thực hiện...' : 'Thực hiện Tính Giá' }}
                     </button>
                 </div>
             </div>
@@ -41,10 +49,10 @@
                 <div class="success-icon"><i class="fas fa-check-circle"></i></div>
                 <h3>Tính giá hoàn tất!</h3>
                 <ul class="result-details">
-                    <li><strong>Thời gian xử lý:</strong> {{ result.time }} giây</li>
+                    <li v-if="result.time"><strong>Thời gian xử lý:</strong> {{ result.time }} giây</li>
                     <li><strong>Số phiếu xuất được cập nhật:</strong> {{ result.updatedVouchers }} chứng từ</li>
-                    <li><strong>Tổng giá vốn xuất kho:</strong> <span class="text-red-600 font-bold">{{
-                            result.totalValue }}</span> VNĐ</li>
+                    <li v-if="result.totalValue"><strong>Tổng giá vốn xuất kho:</strong> <span
+                            class="text-red-600 font-bold">{{ result.totalValue }}</span> VNĐ</li>
                 </ul>
             </div>
         </div>
@@ -52,34 +60,115 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useToast } from 'vue-toastification'
+import inventoryApi from '../service/inventory.api'
 
 const router = useRouter()
-const period = ref('2026-04')
-const method = ref('BGGQ_CUOIKY')
+const toast = useToast()
+
+const period = ref('')
+const method = ref('BGGQ_CUOIKY') // Mặc định chọn Bình quân cuối kỳ
 const isProcessing = ref(false)
 const result = ref(null)
 
+onMounted(() => {
+    // Tự động gán kỳ tính giá là tháng hiện tại khi mở form
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+    period.value = `${currentYear}-${currentMonth}`;
+})
+
 const goBack = () => router.push({ name: 'InventoryDashboard' })
 
-const runCosting = () => {
+const runCosting = async () => {
+    if (!period.value) {
+        toast.warning("Vui lòng chọn kỳ tính giá!")
+        return
+    }
+
     isProcessing.value = true
     result.value = null
 
-    // Giả lập thời gian Backend .NET xử lý (Ví dụ mất 2.5 giây để update DB)
-    setTimeout(() => {
-        isProcessing.value = false
-        result.value = {
-            time: 2.5,
-            updatedVouchers: 42,
-            totalValue: '1,250,400,000'
+    // 1. Bóc tách Input type="month" (VD: "2026-04")
+    const [yearStr, monthStr] = period.value.split('-')
+
+    // 2. BỔ SUNG TRƯỜNG METHOD VÀO PAYLOAD ĐỂ C# HIỂU ĐƯỢC
+    const payload = {
+        month: Number(monthStr),
+        year: Number(yearStr),
+        method: method.value
+    }
+
+    try {
+        const response = await inventoryApi.calculatePrice(payload)
+        const responseData = response.data || {}
+
+        // 3. XỬ LÝ LOGIC TRẢ VỀ TỪ BACKEND
+        if (!responseData.success) {
+            // Nếu Backend báo lỗi (Hoặc chọn FIFO chưa hỗ trợ), ném lỗi ra catch để hiển thị Toast đỏ
+            throw new Error(responseData.message || "Lỗi xử lý từ máy chủ!");
         }
-    }, 2500)
+
+        toast.success(responseData.message || `Đã tính giá vốn thành công cho kỳ ${monthStr}/${yearStr}!`)
+
+        // 4. Map chính xác các trường dữ liệu mà Backend C# mới trả về
+        const data = responseData.data || {}
+        result.value = {
+            updatedVouchers: data.updatedVouchers || 0,
+            totalValue: data.totalValue ? new Intl.NumberFormat('vi-VN').format(data.totalValue) : '0',
+            time: data.time || 0
+        }
+
+    } catch (error) {
+        console.error("Lỗi khi tính giá vốn:", error)
+
+        // Hiển thị thông báo lỗi chi tiết từ C# gửi lên (Nếu có)
+        const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi tính giá vốn!"
+        toast.error(errorMessage)
+
+    } finally {
+        isProcessing.value = false
+    }
 }
 </script>
 
 <style scoped>
+/* Lớp phủ ngăn người dùng click bậy khi đang chạy API */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #1e3a8a;
+}
+
+.loading-overlay .spinner {
+    font-size: 48px;
+    color: #9333ea;
+    margin-bottom: 20px;
+}
+
+.loading-overlay h2 {
+    margin: 0 0 8px 0;
+    font-size: 24px;
+}
+
+.loading-overlay p {
+    margin: 0;
+    color: #6b7280;
+}
+
 .inventory-form-container {
     padding: 24px;
     background-color: #f8f9fc;
@@ -87,6 +176,7 @@ const runCosting = () => {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    position: relative;
 }
 
 .form-header {
@@ -169,6 +259,12 @@ const runCosting = () => {
 
 .input-box:focus {
     border-color: #9333ea;
+    box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.1);
+}
+
+.input-box:disabled {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
 }
 
 .required {
@@ -200,6 +296,7 @@ const runCosting = () => {
 
 .btn-run:hover:not(:disabled) {
     background: #7e22ce;
+    box-shadow: 0 4px 6px -1px rgba(147, 51, 234, 0.3);
 }
 
 .btn-run:disabled {
@@ -214,6 +311,19 @@ const runCosting = () => {
     border-radius: 8px;
     padding: 24px;
     text-align: center;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .success-icon {

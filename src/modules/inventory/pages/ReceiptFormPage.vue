@@ -8,7 +8,7 @@
         <h2 class="page-title">Thêm mới Phiếu Nhập Kho</h2>
       </div>
       <div class="header-right">
-        <button class="btn-outline">Hủy bỏ</button>
+        <button class="btn-outline" @click="resetForm">Hủy bỏ</button>
         <button class="btn-primary" @click="saveVoucher">
           <i class="fas fa-save"></i> Lưu chứng từ
         </button>
@@ -19,13 +19,27 @@
       <div class="section-grid">
         <div class="info-group">
           <h3 class="group-title">Thông tin chung</h3>
+
           <div class="form-row">
-            <label>Nhà cung cấp</label>
-            <div class="input-with-icon">
-              <input type="text" v-model="masterData.vendor" placeholder="Chọn hoặc nhập tên nhà cung cấp..." />
-              <i class="fas fa-search"></i>
-            </div>
+            <label>Nhà cung cấp <span class="required">*</span></label>
+            <select v-model="masterData.partnerId" class="cell-input w-full">
+              <option value="0" disabled>-- Chọn nhà cung cấp --</option>
+              <option v-for="partner in partners" :key="partner.id" :value="partner.id">
+                {{ partner.partnerCode }} - {{ partner.partnerName }}
+              </option>
+            </select>
           </div>
+
+          <div class="form-row">
+            <label>Kho hàng <span class="required">*</span></label>
+            <select v-model="masterData.warehouseId" class="cell-input w-full">
+              <option value="0" disabled>-- Chọn kho nhập --</option>
+              <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">
+                {{ wh.warehouse_code || wh.warehouseCode }} - {{ wh.warehouse_name || wh.warehouseName }}
+              </option>
+            </select>
+          </div>
+
           <div class="form-row">
             <label>Người giao hàng</label>
             <input type="text" v-model="masterData.deliverer" placeholder="Họ và tên người giao..." />
@@ -40,11 +54,11 @@
           <h3 class="group-title">Chứng từ</h3>
           <div class="form-row">
             <label>Số chứng từ <span class="required">*</span></label>
-            <input type="text" v-model="masterData.voucherNumber" class="font-bold text-blue-600" />
+            <input type="text" v-model="masterData.voucherNumber" class="font-bold text-blue-600" readonly />
           </div>
           <div class="form-row">
             <label>Ngày hạch toán <span class="required">*</span></label>
-            <input type="date" v-model="masterData.postDate" />
+            <input type="date" v-model="masterData.postingDate" />
           </div>
           <div class="form-row">
             <label>Ngày chứng từ <span class="required">*</span></label>
@@ -55,8 +69,18 @@
     </div>
 
     <div class="form-section detail-section">
-      <h3 class="group-title">Chi tiết hàng hóa</h3>
-      
+      <div class="detail-section-header">
+        <h3 class="group-title no-border">Chi tiết hàng hóa</h3>
+        <div class="header-actions-right">
+          <button class="btn-import-excel" @click="isExcelModalOpen = true">
+            <i class="fas fa-file-excel fa-lg"></i> Nhập từ Excel
+          </button>
+        </div>
+      </div>
+
+      <ExcelImportModal :isOpen="isExcelModalOpen" @close="isExcelModalOpen = false"
+        @import-success="handleExcelDataImported" />
+
       <div class="table-responsive">
         <table class="detail-table">
           <thead>
@@ -89,13 +113,16 @@
                 </select>
               </td>
               <td>
-                <input type="number" v-model="row.quantity" @input="calculateAmount(index)" class="cell-input text-right" min="0" />
+                <input type="number" v-model="row.quantity" @input="calculateAmount(index)"
+                  class="cell-input text-right" min="0" />
               </td>
               <td>
-                <input type="number" v-model="row.price" @input="calculateAmount(index)" class="cell-input text-right" min="0" />
+                <input type="number" v-model="row.price" @input="calculateAmount(index)" class="cell-input text-right"
+                  min="0" />
               </td>
               <td>
-                <input type="text" :value="formatCurrency(row.amount)" class="cell-input text-right font-semibold text-blue-600 bg-gray-50" readonly />
+                <input type="text" :value="formatCurrency(row.amount)"
+                  class="cell-input text-right font-semibold text-blue-600 bg-gray-50" readonly />
               </td>
               <td class="text-center">
                 <button class="btn-delete-row" @click="removeRow(index)" title="Xóa dòng này">
@@ -128,38 +155,103 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useInventoryStore } from '../store/inventory.store'
+import ExcelImportModal from '../components/ExcelImportModal.vue'
+import { useToast } from 'vue-toastification' // Đổi lại import đúng với thư viện Toast bạn đang dùng
 
 const router = useRouter()
+const inventoryStore = useInventoryStore()
+const toast = useToast() // Khởi tạo Toast
+
+const isExcelModalOpen = ref(false)
+
+// BIẾN LƯU DỮ LIỆU DANH MỤC
+const partners = computed(() => inventoryStore.partners)
+const warehouses = computed(() => inventoryStore.warehouses)
+const itemsList = computed(() => inventoryStore.items) // Lấy thêm danh sách hàng hóa từ store để map ID
+
+// 0. HÀM TẠO MÃ CHỨNG TỪ TỰ ĐỘNG
+const generateVoucherNumber = () => {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(-2);
+  const randomNum = Math.floor(Math.random() * 900) + 100;
+  return `NK${dd}${mm}${yy}-${randomNum}`;
+};
 
 // 1. Dữ liệu Master (Thông tin chung)
 const today = new Date().toISOString().split('T')[0]
 const masterData = reactive({
-  vendor: '',
+  partnerId: 0,
+  warehouseId: 0,
   deliverer: '',
   description: 'Nhập kho mua hàng',
-  voucherNumber: 'NK2604-002', // Thường sẽ call API lấy mã tự tăng
-  postDate: today,
+  voucherNumber: generateVoucherNumber(),
+  postingDate: today,
   voucherDate: today
 })
 
 // 2. Dữ liệu Detail (Các dòng hàng hóa)
 const detailRows = ref([
-  { id: Date.now(), itemCode: '', itemName: '', unit: 'Cái', quantity: 0, price: 0, amount: 0 }
+  { id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', quantity: 0, price: 0, amount: 0 }
 ])
 
-// 3. Các hàm xử lý nghiệp vụ Bảng chi tiết
-const addRow = () => {
-  detailRows.value.push({
-    id: Date.now(), // Tạo ID giả để Vue render
-    itemCode: '', itemName: '', unit: 'Cái', quantity: 0, price: 0, amount: 0
+// --- FETCH DATA TỪ API KHI LOAD TRANG ---
+onMounted(async () => {
+  try {
+    await inventoryStore.fetchMetadata();
+  } catch (error) {
+    toast.error("Không thể tải dữ liệu danh mục nền. Vui lòng tải lại trang!");
+    console.error("Lỗi khi tải danh mục nền:", error);
+  }
+})
+
+// 3. Hàm nhận dữ liệu từ Component Excel nhả về
+const handleExcelDataImported = (excelData) => {
+  const missingCodes = []; // Mảng lưu các mã không tìm thấy
+
+  const mappedRows = excelData.map(row => {
+    const code = (row['Mã hàng'] || '').toString().trim();
+    const foundItem = itemsList.value.find(i => i.itemCode === code);
+    
+    // Nếu không tìm thấy trong DB, ghi nhận lại mã đó
+    if (!foundItem && code !== '') {
+      missingCodes.push(code);
+    }
+    
+    return {
+      id: Date.now() + Math.random(),
+      itemId: foundItem ? foundItem.id : 0, 
+      itemCode: code,
+      itemName: row['Tên hàng'] || (foundItem ? foundItem.itemName : ''),
+      unit: row['ĐVT'] || 'Cái',
+      quantity: Number(row['Số lượng']) || 0,
+      price: Number(row['Đơn giá']) || 0,
+      amount: (Number(row['Số lượng']) || 0) * (Number(row['Đơn giá']) || 0)
+    };
   })
+  
+  detailRows.value = mappedRows;
+
+  // Hiển thị thông báo thông minh
+  if (missingCodes.length > 0) {
+    toast.warning(`Cảnh báo: Có ${missingCodes.length} mã hàng chưa tồn tại trong hệ thống (${missingCodes.join(', ')}). Bạn cần tạo mã này trước khi lưu!`, { timeout: 8000 });
+  } else {
+    toast.success(`Đã tải thành công ${mappedRows.length} dòng dữ liệu từ Excel!`);
+  }
+}
+
+// 4. Các hàm xử lý nghiệp vụ Bảng chi tiết
+const addRow = () => {
+  detailRows.value.push({ id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', quantity: 0, price: 0, amount: 0 })
 }
 
 const removeRow = (index) => {
   if (detailRows.value.length === 1) {
-    alert('Phiếu nhập phải có ít nhất 1 dòng hàng hóa!')
+    toast.warning('Phiếu nhập phải có ít nhất 1 dòng hàng hóa!');
     return
   }
   detailRows.value.splice(index, 1)
@@ -167,37 +259,132 @@ const removeRow = (index) => {
 
 const calculateAmount = (index) => {
   const row = detailRows.value[index]
-  // Thành tiền = Số lượng * Đơn giá
   row.amount = (row.quantity || 0) * (row.price || 0)
 }
 
-// 4. Computed tự động tính tổng (Reactive)
-const totalQuantity = computed(() => {
-  return detailRows.value.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
-})
+// 5. Computed tự động tính tổng (Reactive)
+const totalQuantity = computed(() => detailRows.value.reduce((sum, row) => sum + Number(row.quantity || 0), 0))
+const totalAmount = computed(() => detailRows.value.reduce((sum, row) => sum + Number(row.amount || 0), 0))
 
-const totalAmount = computed(() => {
-  return detailRows.value.reduce((sum, row) => sum + Number(row.amount || 0), 0)
-})
-
-// 5. Utils
+// 6. Utils & Form Actions
 const formatCurrency = (value) => {
   if (!value) return '0'
   return new Intl.NumberFormat('vi-VN').format(value)
 }
-// back lại trang 
-const goBack = () => router.push({ name: 'InventoryDashboard' }) 
 
-const saveVoucher = () => {
-  const payload = {
-    master: masterData,
-    details: detailRows.value,
-    totalAmount: totalAmount.value
+const goBack = () => router.push({ name: 'InventoryDashboard' })
+
+const resetForm = () => {
+  masterData.partnerId = 0;
+  masterData.warehouseId = 0;
+  masterData.deliverer = '';
+  masterData.description = 'Nhập kho mua hàng';
+  masterData.voucherNumber = generateVoucherNumber();
+  masterData.postingDate = today;
+  masterData.voucherDate = today;
+
+  detailRows.value = [{ id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', quantity: 0, price: 0, amount: 0 }];
+}
+
+
+// 7. HÀM LƯU CHỨNG TỪ (Đã tối ưu hóa xử lý)
+const saveVoucher = async () => {
+  try {
+    // BƯỚC 1: Validate Thông tin chung
+    if (!masterData.voucherNumber) {
+      toast.warning('Vui lòng nhập số chứng từ!');
+      return;
+    }
+    if (!masterData.partnerId || masterData.partnerId === 0) {
+      toast.warning('Vui lòng chọn Nhà cung cấp!');
+      return;
+    }
+    if (!masterData.warehouseId || masterData.warehouseId === 0) {
+      toast.warning('Vui lòng chọn Kho hàng!');
+      return;
+    }
+    if (!masterData.postingDate) {
+      toast.warning('Vui lòng nhập Ngày hạch toán!');
+      return;
+    }
+    if (!masterData.voucherDate) {
+      toast.warning('Vui lòng nhập Ngày chứng từ!');
+      return;
+    }
+
+    // BƯỚC 2: Validate Chi tiết hàng hóa (Cho phép tạo mã mới)
+    const invalidLines = detailRows.value.filter(row => {
+      if (row.quantity <= 0) return true;
+      if (row.itemId === 0 && !row.itemName && !row.itemCode) return true;
+      return false;
+    });
+
+    if (invalidLines.length > 0) {
+      toast.warning('Vui lòng kiểm tra lại: Có dòng chưa nhập Số lượng hoặc chưa có Tên mặt hàng!');
+      return;
+    }
+
+    // HÀM BỔ TRỢ: Định dạng ngày an toàn, chống lệch múi giờ UTC
+    // Định dạng YYYY-MM-DD ghép với T00:00:00.000Z để giữ nguyên ngày chọn
+    const safeDateFormat = (dateStr) => {
+      return `${dateStr}T00:00:00.000Z`;
+    };
+
+    // BƯỚC 3: Đóng gói Payload gửi xuống Backend
+    const payload = {
+      document: {
+        documentNo: masterData.voucherNumber,
+        docType: "receipt", 
+        documentDate: safeDateFormat(masterData.voucherDate), // Đã chuẩn hóa ngày chứng từ
+        postingDate: safeDateFormat(masterData.postingDate),   // Đã chuẩn hóa ngày hạch toán
+        partnerId: Number(masterData.partnerId),
+        warehouseId: Number(masterData.warehouseId),
+        description: masterData.description,
+        totalAmount: totalAmount.value,
+        status: 0 // Ép buộc trạng thái 0 (Chờ ghi sổ) cho chứng từ mới tạo
+      },
+      lines: detailRows.value.map(row => ({
+        itemId: Number(row.itemId) || 0, 
+        quantity: Number(row.quantity) || 0,
+        unitPrice: Number(row.price) || 0,
+        taxRate: 0,
+        description: row.itemName || row.itemCode 
+      }))
+    }
+
+    // BƯỚC 4: Gọi API qua Store
+    const response = await inventoryStore.createNewDocument(payload);
+
+    if (response && response.success === true) {
+      toast.success(response.message || 'Lưu chứng từ thành công!');
+      resetForm();
+      
+      // Tải lại danh mục nền để đồng bộ mã hàng hóa mới sinh từ Backend (nếu có)
+      await inventoryStore.fetchMetadata();
+    } else {
+      toast.error(response?.message || 'Có lỗi xảy ra, không thể lưu chứng từ!');
+    }
+
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message || 'Lỗi kết nối đến máy chủ!';
+    toast.error(`Giao dịch thất bại: ${errorMsg}`);
+    console.error('Lỗi khi thực thi lưu chứng từ:', error);
   }
-  console.log('Dữ liệu chuẩn bị gửi API:', payload)
-  alert('Lưu chứng từ thành công! (Check F12 Console để xem cục data)')
 }
 </script>
+
+<style scoped>
+/* Chèn thêm đoạn CSS sau để Select đẹp hơn */
+select.cell-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: white;
+  appearance: auto;
+  /* Hiển thị mũi tên thả xuống */
+}
+</style>
 
 <style scoped>
 .receipt-form-container {
@@ -216,67 +403,278 @@ const saveVoucher = () => {
   align-items: center;
 }
 
-.header-left, .header-right {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.page-title { margin: 0; font-size: 24px; color: #111827; }
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  color: #111827;
+}
 
 .btn-back {
-  background: transparent; border: none; font-size: 14px;
-  color: #4b5563; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: #4b5563;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.btn-back:hover { color: #7c3aed; }
 
-.btn-primary { background: #7c3aed; color: white; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-weight: 500;}
-.btn-outline { background: white; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 20px; cursor: pointer; }
+.btn-back:hover {
+  color: #7c3aed;
+}
+
+.btn-primary {
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-outline {
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+}
 
 /* Các khối thẻ Form */
 .form-section {
-  background: white; border-radius: 12px; padding: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.group-title { margin-top: 0; margin-bottom: 20px; font-size: 16px; color: #7c3aed; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;}
+.group-title {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 16px;
+  color: #7c3aed;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
 
 /* CSS Grid cho thông tin chung */
-.section-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 40px; }
-@media (max-width: 1024px) { .section-grid { grid-template-columns: 1fr; gap: 20px; } }
+.section-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 40px;
+}
 
-.form-row { display: flex; align-items: center; margin-bottom: 16px; }
-.form-row label { width: 140px; font-size: 14px; color: #4b5563; font-weight: 500; }
-.form-row input, .form-row select { flex: 1; height: 38px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 12px; outline: none; }
-.form-row input:focus { border-color: #7c3aed; }
-.required { color: #dc2626; }
+@media (max-width: 1024px) {
+  .section-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
 
-.input-with-icon { position: relative; flex: 1; display: flex; }
-.input-with-icon input { width: 100%; }
-.input-with-icon i { position: absolute; right: 12px; top: 12px; color: #9ca3af; }
+.form-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.form-row label {
+  width: 140px;
+  font-size: 14px;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.form-row input,
+.form-row select {
+  flex: 1;
+  height: 38px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0 12px;
+  outline: none;
+}
+
+.form-row input:focus {
+  border-color: #7c3aed;
+}
+
+.required {
+  color: #dc2626;
+}
+
+.input-with-icon {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.input-with-icon input {
+  width: 100%;
+}
+
+.input-with-icon i {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  color: #9ca3af;
+}
 
 /* Bảng chi tiết */
-.detail-table { width: 100%; border-collapse: collapse; min-width: 900px; }
-.detail-table th { background: #f3f4f6; padding: 12px 8px; text-align: left; font-size: 13px; font-weight: 600; color: #374151; border: 1px solid #e5e7eb; }
-.detail-table td { border: 1px solid #e5e7eb; padding: 0; }
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.detail-table th {
+  background: #f3f4f6;
+  padding: 12px 8px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.detail-table td {
+  border: 1px solid #e5e7eb;
+  padding: 0;
+}
 
 /* Ô input bên trong bảng - Thiết kế Seamless (không viền) */
 .cell-input {
-  width: 100%; height: 40px; border: none; padding: 0 8px; background: transparent; outline: none; font-size: 14px;
+  width: 100%;
+  height: 40px;
+  border: none;
+  padding: 0 8px;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
 }
-.cell-input:focus { background: #fef08a; /* Đổi màu nền vàng nhạt khi focus để dễ nhìn */ }
-.uppercase { text-transform: uppercase; }
-.bg-gray-50 { background-color: #f9fafb; }
 
-.btn-delete-row { background: transparent; border: none; color: #9ca3af; cursor: pointer; width: 100%; height: 40px; }
-.btn-delete-row:hover { color: #dc2626; }
+.cell-input:focus {
+  background: #fef08a;
+  /* Đổi màu nền vàng nhạt khi focus để dễ nhìn */
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.bg-gray-50 {
+  background-color: #f9fafb;
+}
+
+.btn-delete-row {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  width: 100%;
+  height: 40px;
+}
+
+.btn-delete-row:hover {
+  color: #dc2626;
+}
 
 /* Khu vực cộng tiền */
-.detail-actions-summary { display: flex; justify-content: space-between; margin-top: 16px; }
-.btn-add-row { background: transparent; border: 1px dashed #7c3aed; color: #7c3aed; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; }
-.btn-add-row:hover { background: #ede9fe; }
+.detail-actions-summary {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
 
-.summary-box { background: #f9fafb; padding: 16px 24px; border-radius: 8px; border: 1px solid #e5e7eb; min-width: 300px; }
-.summary-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-.total-amount { font-size: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #d1d5db; }
+.btn-add-row {
+  background: transparent;
+  border: 1px dashed #7c3aed;
+  color: #7c3aed;
+  padding: 6px 12px;
+  /* Giảm padding xuống cho nút thon gọn hơn (cũ là 8px 16px) */
+  font-size: 13px;
+  /* Thu nhỏ cỡ chữ xuống một chút */
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  align-self: flex-start;
+  /* QUAN TRỌNG: Ngăn nút bị kéo giãn chiều cao bằng với hộp tổng tiền */
+}
+
+.btn-add-row:hover {
+  background: #ede9fe;
+}
+
+.summary-box {
+  background: #f9fafb;
+  padding: 16px 24px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  min-width: 300px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.total-amount {
+  font-size: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #d1d5db;
+}
+
+
+/* nhập nhanh excel */
+
+/* Container chứa tiêu đề và nút */
+.detail-section-header {
+  display: flex;
+  justify-content: space-between;
+  /* Đẩy tiêu đề sang trái, nút sang phải */
+  align-items: center;
+  /* Căn giữa theo chiều dọc */
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+  /* Kéo dài đường gạch dưới ra toàn bộ bề ngang */
+  padding-bottom: 8px;
+}
+
+/* Xóa border và margin cũ của thẻ h3 vì div bọc ngoài đã đảm nhận rồi */
+.group-title.no-border {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Kế thừa lại CSS của nút Excel ở bước trước */
+.btn-import-excel {
+  background: #10b981;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-import-excel:hover {
+  background: #059669;
+}
 </style>

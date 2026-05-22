@@ -8,9 +8,9 @@
                 <h2 class="page-title">Thêm mới Phiếu Xuất Kho</h2>
             </div>
             <div class="header-right">
-                <button class="btn-outline">Hủy bỏ</button>
+                <button class="btn-outline" @click="resetForm">Hủy bỏ</button>
                 <button class="btn-primary" @click="saveVoucher">
-                    <i class="fas fa-save"></i> Lưu & Duyệt phiếu
+                    <i class="fas fa-save"></i> Lưu chứng từ
                 </button>
             </div>
         </div>
@@ -19,26 +19,40 @@
             <div class="section-grid">
                 <div class="info-group">
                     <h3 class="group-title">Thông tin chung</h3>
+
                     <div class="form-row">
                         <label>Lý do xuất <span class="required">*</span></label>
-                        <select v-model="masterData.reason" class="font-medium text-blue-600">
+                        <select v-model="masterData.reason" class="cell-input w-full font-medium text-blue-600">
                             <option value="sales">Xuất bán hàng</option>
                             <option value="internal">Xuất tiêu dùng nội bộ</option>
                             <option value="destroy">Xuất hủy hàng hỏng</option>
                         </select>
                     </div>
+
                     <div class="form-row">
-                        <label>Đối tượng nhận</label>
-                        <div class="input-with-icon">
-                            <input type="text" v-model="masterData.receiver"
-                                :placeholder="masterData.reason === 'sales' ? 'Chọn khách hàng...' : 'Chọn nhân viên/phòng ban...'" />
-                            <i class="fas fa-search"></i>
-                        </div>
+                        <label>Kho xuất <span class="required">*</span></label>
+                        <select v-model="masterData.warehouseId" class="cell-input w-full" @change="onWarehouseChange">
+                            <option value="0" disabled>-- Chọn kho xuất --</option>
+                            <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">
+                                {{ wh.warehouse_code || wh.warehouseCode }} - {{ wh.warehouse_name || wh.warehouseName
+                                }}
+                            </option>
+                        </select>
                     </div>
+
+                    <div class="form-row">
+                        <label>Khách hàng nhận <span class="required">*</span></label>
+                        <select v-model="masterData.partnerId" class="cell-input w-full">
+                            <option value="0" disabled>-- Chọn khách hàng nhận --</option>
+                            <option v-for="customer in customersList" :key="customer.id" :value="customer.id">
+                                {{ customer.partnerCode }} - {{ customer.partnerName }}
+                            </option>
+                        </select>
+                    </div>
+
                     <div class="form-row">
                         <label>Diễn giải</label>
-                        <input type="text" v-model="masterData.description"
-                            placeholder="Ghi chú thêm về lô xuất này..." />
+                        <input type="text" v-model="masterData.description" placeholder="Lý do xuất kho..." />
                     </div>
                 </div>
 
@@ -46,22 +60,33 @@
                     <h3 class="group-title">Chứng từ</h3>
                     <div class="form-row">
                         <label>Số chứng từ <span class="required">*</span></label>
-                        <input type="text" v-model="masterData.voucherNumber" class="font-bold text-orange-600" />
+                        <input type="text" v-model="masterData.voucherNumber" class="font-bold text-orange-600"
+                            readonly />
                     </div>
                     <div class="form-row">
                         <label>Ngày hạch toán <span class="required">*</span></label>
-                        <input type="date" v-model="masterData.postDate" />
+                        <input type="date" v-model="masterData.postingDate" />
                     </div>
                     <div class="form-row">
-                        <label>Trạng thái</label>
-                        <span class="status-badge bg-gray-100 text-gray-600">Chờ duyệt</span>
+                        <label>Ngày chứng từ <span class="required">*</span></label>
+                        <input type="date" v-model="masterData.voucherDate" />
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="form-section detail-section">
-            <h3 class="group-title">Chi tiết hàng hóa</h3>
+            <div class="detail-section-header">
+                <h3 class="group-title no-border">Chi tiết hàng hóa</h3>
+                <div class="header-actions-right">
+                    <button class="btn-import-excel" @click="isExcelModalOpen = true">
+                        <i class="fas fa-file-excel fa-lg"></i> Nhập từ Excel
+                    </button>
+                </div>
+            </div>
+
+            <ExcelImportModal :isOpen="isExcelModalOpen" @close="isExcelModalOpen = false"
+                @import-success="handleExcelDataImported" />
 
             <div class="table-responsive">
                 <table class="detail-table">
@@ -69,7 +94,7 @@
                         <tr>
                             <th style="width: 40px;" class="text-center">#</th>
                             <th style="width: 150px;">Mã hàng</th>
-                            <th style="width: 250px;">Tên hàng</th>
+                            <th>Tên hàng</th>
                             <th style="width: 80px;">ĐVT</th>
                             <th style="width: 100px;" class="text-right">Tồn kho</th>
                             <th style="width: 120px;" class="text-right">SL Xuất</th>
@@ -79,26 +104,31 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(row, index) in detailRows" :key="row.id" :class="{ 'row-error': row.error }">
+                        <tr v-for="(row, index) in detailRows" :key="row.id" :class="{ 'bg-red-50': row.error }">
                             <td class="text-center text-gray-500">{{ index + 1 }}</td>
 
                             <td>
-                                <input type="text" v-model="row.itemCode" @blur="fetchItemData(index)"
-                                    class="cell-input uppercase font-medium" placeholder="Gõ: IP15..." />
+                                <select v-model="row.itemId" @change="onItemChange(index)"
+                                    class="cell-input uppercase font-medium">
+                                    <option value="0" disabled>-- Chọn mã --</option>
+                                    <option v-for="item in itemsList" :key="item.id" :value="item.id">
+                                        {{ item.itemCode }}
+                                    </option>
+                                </select>
                             </td>
 
                             <td>
                                 <input type="text" v-model="row.itemName" class="cell-input bg-gray-50" readonly
                                     tabindex="-1" />
                             </td>
+
                             <td>
-                                <input type="text" v-model="row.unit" class="cell-input bg-gray-50" readonly
+                                <input type="text" v-model="row.unit" class="cell-input bg-gray-50 text-center" readonly
                                     tabindex="-1" />
                             </td>
 
                             <td>
-                                <div class="cell-input bg-gray-50 text-right flex items-center justify-end font-semibold text-green-600"
-                                    readonly>
+                                <div class="cell-input bg-gray-50 text-right font-bold text-green-600">
                                     {{ row.inStock !== null ? row.inStock : '-' }}
                                 </div>
                             </td>
@@ -110,8 +140,8 @@
                             </td>
 
                             <td>
-                                <input type="number" v-model="row.price" @input="calculateAmount(index)"
-                                    class="cell-input text-right" :disabled="masterData.reason !== 'sales'" min="0" />
+                                <input type="number" v-model="row.price" @input="validateRow(index)"
+                                    class="cell-input text-right" min="0" />
                             </td>
 
                             <td>
@@ -119,6 +149,7 @@
                                     class="cell-input text-right font-semibold text-blue-600 bg-gray-50" readonly
                                     tabindex="-1" />
                             </td>
+
                             <td class="text-center">
                                 <button class="btn-delete-row" @click="removeRow(index)" title="Xóa dòng này">
                                     <i class="fas fa-trash-alt"></i>
@@ -128,9 +159,9 @@
                     </tbody>
                 </table>
 
-                <div v-if="hasError" class="error-message">
-                    <i class="fas fa-exclamation-triangle"></i> Lỗi: Có dòng hàng hóa đang xuất vượt quá số lượng tồn
-                    kho khả dụng!
+                <div v-if="hasError" class="mt-3 text-red-600 font-medium px-4">
+                    <i class="fas fa-exclamation-triangle"></i> Cảnh báo: Có dòng hàng hóa đang xuất vượt quá số lượng
+                    tồn kho khả dụng!
                 </div>
             </div>
 
@@ -155,128 +186,274 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useInventoryStore } from '../store/inventory.store'
+import inventoryApi from '../service/inventory.api'
+import ExcelImportModal from '../components/ExcelImportModal.vue'
+import { useToast } from 'vue-toastification'
 
 const router = useRouter()
+const inventoryStore = useInventoryStore()
+const toast = useToast()
 
-// --- GIẢ LẬP DATABASE (MOCK DATA) ---
-// Thực tế đoạn này sẽ gọi API GET /api/inventory/items?code=...
-const mockDatabase = {
-    'IP15': { name: 'iPhone 15 Pro Max 256GB', unit: 'Cái', stock: 12, defaultPrice: 29500000 },
-    'MACM3': { name: 'MacBook Pro 14 M3', unit: 'Cái', stock: 4, defaultPrice: 39990000 },
-    'AIRP': { name: 'AirPods Pro 2', unit: 'Cái', stock: 0, defaultPrice: 5500000 } // Hết hàng
-}
+const isExcelModalOpen = ref(false)
+
+// BIẾN LƯU DỮ LIỆU DANH MỤC
+const warehouses = computed(() => inventoryStore.warehouses)
+const itemsList = computed(() => inventoryStore.items)
+const customersList = computed(() => inventoryStore.customers)
+
+// Lọc Đối tác: Nếu lý do là Xuất bán thì chỉ hiện Khách hàng (partnerType = 1)
+const partners = computed(() => {
+    if (masterData.reason === 'sales') {
+        return inventoryStore.partners.filter(p => p.partnerType === 1);
+    }
+    return inventoryStore.partners;
+})
+
+// 0. HÀM TẠO MÃ CHỨNG TỪ (Đổi thành XK)
+const generateVoucherNumber = () => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const randomNum = Math.floor(Math.random() * 900) + 100;
+    return `XK${dd}${mm}${yy}-${randomNum}`;
+};
 
 // 1. Dữ liệu Master
 const today = new Date().toISOString().split('T')[0]
 const masterData = reactive({
     reason: 'sales',
-    receiver: '',
+    partnerId: 0,
+    warehouseId: 0,
     description: 'Xuất bán hàng hóa',
-    voucherNumber: 'XK2604-001',
-    postDate: today
+    voucherNumber: generateVoucherNumber(),
+    postingDate: today,
+    voucherDate: today
 })
 
-// Tự động đổi diễn giải khi đổi lý do xuất
+// Tự động nhảy diễn giải khi đổi lý do
 watch(() => masterData.reason, (newReason) => {
     if (newReason === 'sales') masterData.description = 'Xuất bán hàng hóa'
     else if (newReason === 'internal') masterData.description = 'Xuất sử dụng nội bộ'
-    else masterData.description = 'Xuất hủy'
+    else masterData.description = 'Xuất hủy hàng hỏng'
+    masterData.partnerId = 0; // Reset lại ô chọn đối tác
 })
 
-// 2. Dữ liệu Detail
+// Cập nhật lại tồn kho nếu người dùng đổi Kho xuất ở trên form Master
+const onWarehouseChange = () => {
+    detailRows.value.forEach((row, index) => {
+        if (row.itemId !== 0) fetchRealTimeStock(index);
+    });
+}
+
+// 2. Dữ liệu Detail (Thêm inStock và error)
 const detailRows = ref([
-    { id: Date.now(), itemCode: '', itemName: '', unit: '', inStock: null, quantity: 0, price: 0, amount: 0, error: false }
+    { id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', inStock: null, quantity: 0, price: 0, amount: 0, error: false }
 ])
 
-// 3. Nghiệp vụ: Lấy thông tin hàng hóa từ "Database"
-const fetchItemData = (index) => {
-    const row = detailRows.value[index]
-    if (!row.itemCode) return
+// --- FETCH DATA TỪ API KHI LOAD TRANG ---
+onMounted(async () => {
+    try {
+        await inventoryStore.fetchMetadata();
+    } catch (error) {
+        toast.error("Không thể tải dữ liệu danh mục nền. Vui lòng tải lại trang!");
+    }
+})
 
-    const code = row.itemCode.toUpperCase()
-    const item = mockDatabase[code]
+// 3. XỬ LÝ CHỌN MÃ HÀNG VÀ KIỂM TRA TỒN KHO
+const onItemChange = async (index) => {
+    const row = detailRows.value[index];
+    const selectedItem = itemsList.value.find(i => i.id === row.itemId);
 
-    if (item) {
-        row.itemName = item.name
-        row.unit = item.unit
-        row.inStock = item.stock // Lấy số tồn kho hiện tại
-        row.price = masterData.reason === 'sales' ? item.defaultPrice : 0 // Chỉ gợi ý giá nếu là xuất bán
-        row.error = false
-        validateRow(index) // Kiểm tra lại SL ngay khi load
-    } else {
-        // Không tìm thấy mã
-        row.itemName = 'Không tìm thấy mã hàng!'
-        row.unit = ''
-        row.inStock = null
+    if (selectedItem) {
+        row.itemCode = selectedItem.itemCode;
+        row.itemName = selectedItem.itemName;
+        row.unit = selectedItem.unit || 'Cái';
+        // Nếu là xuất bán thì tự động gợi ý giá bán mặc định, nếu không thì = 0
+        row.price = masterData.reason === 'sales' ? (selectedItem.defaultPrice || 0) : 0;
+
+        // Check tồn kho
+        await fetchRealTimeStock(index);
     }
 }
 
-// 4. Nghiệp vụ cốt lõi: Validate Tồn Kho
+const fetchRealTimeStock = async (index) => {
+    const row = detailRows.value[index];
+    if (masterData.warehouseId === 0) {
+        toast.warning("Vui lòng chọn Kho xuất trước khi chọn mã hàng!");
+        row.inStock = 0;
+        return;
+    }
+
+    try {
+        // Gọi API checkStock của bạn (truyền itemId và warehouseId)
+        const response = await inventoryApi.checkStock(row.itemId, masterData.warehouseId);
+        row.inStock = response.data !== undefined ? response.data : 0;
+        validateRow(index); // Tính toán lại xem có bị xuất lố không
+    } catch (error) {
+        console.error("Lỗi lấy tồn kho:", error);
+        row.inStock = 0;
+        validateRow(index);
+    }
+}
+
+// 4. IMPORT EXCEL DÀNH CHO XUẤT KHO
+const handleExcelDataImported = async (excelData) => {
+    const missingCodes = [];
+
+    const mappedRows = excelData.map(row => {
+        const code = (row['Mã hàng'] || '').toString().trim();
+        const foundItem = itemsList.value.find(i => i.itemCode === code);
+
+        if (!foundItem && code !== '') missingCodes.push(code);
+
+        return {
+            id: Date.now() + Math.random(),
+            itemId: foundItem ? foundItem.id : 0,
+            itemCode: code,
+            itemName: row['Tên hàng'] || (foundItem ? foundItem.itemName : ''),
+            unit: row['ĐVT'] || 'Cái',
+            inStock: null,
+            quantity: Number(row['Số lượng']) || 0,
+            price: Number(row['Đơn giá']) || 0,
+            amount: (Number(row['Số lượng']) || 0) * (Number(row['Đơn giá']) || 0),
+            error: false
+        };
+    })
+
+    detailRows.value = mappedRows;
+
+    // Lặp lấy tồn kho cho toàn bộ danh sách vừa import
+    for (let i = 0; i < detailRows.value.length; i++) {
+        if (detailRows.value[i].itemId !== 0) {
+            await fetchRealTimeStock(i);
+        }
+    }
+
+    if (missingCodes.length > 0) {
+        toast.warning(`Cảnh báo: Có ${missingCodes.length} mã hàng chưa tồn tại (${missingCodes.join(', ')}). Vui lòng tạo mã này trước!`, { timeout: 8000 });
+    } else {
+        toast.success(`Đã tải và kiểm tra tồn kho thành công ${mappedRows.length} dòng từ Excel!`);
+    }
+}
+
+// 5. CÁC HÀM XỬ LÝ LƯỚI & TÍNH TOÁN
 const validateRow = (index) => {
     const row = detailRows.value[index]
-
-    // Tính lại tiền
     row.amount = (row.quantity || 0) * (row.price || 0)
 
-    // Bật cờ lỗi nếu Xuất > Tồn
+    // Bật cờ lỗi đỏ nếu Xuất > Tồn kho khả dụng
     if (row.inStock !== null && row.quantity > row.inStock) {
-        row.error = true
+        row.error = true;
     } else {
-        row.error = false
+        row.error = false;
     }
 }
 
-// Gọi chung khi đổi giá tiền
-const calculateAmount = (index) => {
-    validateRow(index)
-}
-
-// 5. Thêm/Xóa dòng
 const addRow = () => {
-    detailRows.value.push({
-        id: Date.now(), itemCode: '', itemName: '', unit: '', inStock: null, quantity: 0, price: 0, amount: 0, error: false
-    })
+    detailRows.value.push({ id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', inStock: null, quantity: 0, price: 0, amount: 0, error: false })
 }
 
 const removeRow = (index) => {
-    if (detailRows.value.length === 1) return alert('Phải có ít nhất 1 mặt hàng!')
+    if (detailRows.value.length === 1) {
+        toast.warning('Phiếu xuất phải có ít nhất 1 dòng hàng hóa!');
+        return
+    }
     detailRows.value.splice(index, 1)
 }
 
-// 6. Computed properties
+// Tính tổng và bắt lỗi toàn form
 const hasError = computed(() => detailRows.value.some(row => row.error))
-
 const totalQuantity = computed(() => detailRows.value.reduce((sum, row) => sum + Number(row.quantity || 0), 0))
 const totalAmount = computed(() => detailRows.value.reduce((sum, row) => sum + Number(row.amount || 0), 0))
 
-// 7. Utils
-const formatCurrency = (value) => value ? new Intl.NumberFormat('vi-VN').format(value) : '0'
+// 6. Utils & Navigation
+const formatCurrency = (value) => {
+    if (!value) return '0'
+    return new Intl.NumberFormat('vi-VN').format(value)
+}
 
-const goBack = () => router.push({ name: 'InventoryDashboard' }) // Hoặc router.go(-1)
+const goBack = () => router.push({ name: 'InventoryDashboard' })
 
-const saveVoucher = () => {
-    // Chặn lưu nếu có lỗi tồn kho
-    if (hasError.value) {
-        alert('Không thể lưu! Vui lòng kiểm tra lại các dòng bị đỏ (xuất quá số lượng tồn).')
-        return
+const resetForm = () => {
+    masterData.partnerId = 0;
+    masterData.warehouseId = 0;
+    masterData.description = 'Xuất bán hàng hóa';
+    masterData.voucherNumber = generateVoucherNumber();
+    masterData.postingDate = today;
+    masterData.voucherDate = today;
+
+    detailRows.value = [{ id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', inStock: null, quantity: 0, price: 0, amount: 0, error: false }];
+}
+
+// 7. HÀM LƯU CHỨNG TỪ (GỌI API)
+const saveVoucher = async () => {
+    try {
+        // Validate Master
+        if (!masterData.voucherNumber) return toast.warning('Vui lòng nhập số chứng từ!');
+        if (!masterData.warehouseId || masterData.warehouseId === 0) return toast.warning('Vui lòng chọn Kho xuất!');
+        if (!masterData.partnerId || masterData.partnerId === 0) return toast.warning('Vui lòng chọn Đối tượng nhận!');
+        if (!masterData.postingDate || !masterData.voucherDate) return toast.warning('Vui lòng nhập đủ Ngày chứng từ và Ngày hạch toán!');
+
+        // Chặn luồng nếu có bất kỳ dòng nào bị đỏ (lỗi tồn kho)
+        if (hasError.value) {
+            toast.error('Không thể lưu! Vui lòng điều chỉnh lại các dòng báo đỏ (xuất quá số lượng tồn khả dụng).');
+            return;
+        }
+
+        // Validate Detail
+        const invalidLines = detailRows.value.filter(row => {
+            if (row.quantity <= 0) return true;
+            if (row.itemId === 0 && !row.itemName && !row.itemCode) return true;
+            return false;
+        });
+
+        if (invalidLines.length > 0) {
+            toast.warning('Vui lòng kiểm tra lại: Có dòng chưa nhập Số lượng hoặc chưa có Tên mặt hàng!');
+            return;
+        }
+
+        const safeDateFormat = (dateStr) => `${dateStr}T00:00:00.000Z`;
+
+        // Đóng gói Payload (Lưu ý: docType là SALE)
+        const payload = {
+            document: {
+                documentNo: masterData.voucherNumber,
+                docType: "SALE", // <--- Bắt buộc là SALE để backend C# kích hoạt luồng trừ kho
+                documentDate: safeDateFormat(masterData.voucherDate),
+                postingDate: safeDateFormat(masterData.postingDate),
+                partnerId: Number(masterData.partnerId),
+                warehouseId: Number(masterData.warehouseId),
+                description: masterData.description,
+                totalAmount: totalAmount.value,
+                status: 0 // Đẩy lên với trạng thái Chờ ghi sổ
+            },
+            lines: detailRows.value.map(row => ({
+                itemId: Number(row.itemId) || 0,
+                quantity: Number(row.quantity) || 0,
+                unitPrice: Number(row.price) || 0,
+                taxRate: 0,
+                description: row.itemName || row.itemCode
+            }))
+        }
+
+        const response = await inventoryStore.createNewDocument(payload);
+
+        if (response && response.success === true) {
+            toast.success(response.message || 'Lưu phiếu xuất kho thành công!');
+            resetForm();
+            await inventoryStore.fetchMetadata();
+        } else {
+            toast.error(response?.message || 'Có lỗi xảy ra, không thể lưu chứng từ!');
+        }
+
+    } catch (error) {
+        const errorMsg = error.response?.data?.message || error.message || 'Lỗi kết nối đến máy chủ!';
+        toast.error(`Giao dịch thất bại: ${errorMsg}`);
     }
-
-    // Chặn nếu SL = 0
-    if (totalQuantity.value <= 0) {
-        alert('Phiếu xuất phải có số lượng lớn hơn 0!')
-        return
-    }
-
-    const payload = {
-        master: masterData,
-        details: detailRows.value.map(({ error, ...rest }) => rest), // Loại bỏ cờ error trước khi gửi API
-        totalAmount: totalAmount.value
-    }
-    console.log('API Payload Xuất Kho:', payload)
-    alert('Đã lưu Phiếu Xuất thành công! Kho đã được trừ.')
-    goBack()
 }
 </script>
 
@@ -574,5 +751,43 @@ input[disabled] {
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid #d1d5db;
+}
+
+.detail-section-header {
+    display: flex;
+    justify-content: space-between;
+    /* Đẩy tiêu đề sang trái, nút sang phải */
+    align-items: center;
+    /* Căn giữa theo chiều dọc */
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+    /* Kéo dài đường gạch dưới ra toàn bộ bề ngang */
+    padding-bottom: 8px;
+}
+
+/* Xóa border và margin cũ của thẻ h3 vì div bọc ngoài đã đảm nhận rồi */
+.group-title.no-border {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+/* Kế thừa lại CSS của nút Excel ở bước trước */
+.btn-import-excel {
+    background: #10b981;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-import-excel:hover {
+    background: #059669;
 }
 </style>
