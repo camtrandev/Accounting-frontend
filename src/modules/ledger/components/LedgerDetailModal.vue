@@ -9,8 +9,9 @@
             <div class="modal-body" v-if="detailData">
                 <div class="voucher-info">
                     <div class="info-group">
-                        <p><strong>Số chứng từ:</strong> {{ detailData.refNo }}</p>
-                        <p><strong>Ngày hạch toán:</strong> {{ detailData.date }}</p>
+                        <p><strong>Số chứng từ:</strong> {{ detailData.transactionGroupId || detailData.documentId }}
+                        </p>
+                        <p><strong>Ngày hạch toán:</strong> {{ formatDate(detailData.postingDate) }}</p>
                     </div>
                     <div class="info-group text-right">
                         <p><strong>Loại chứng từ:</strong> Phiếu kế toán tổng hợp</p>
@@ -32,9 +33,20 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td>{{ detailData.accountCode }}</td>
-                            <td>{{ detailData.objectName || 'N/A' }}</td>
-                            <td class="text-right">{{ formatMoney(detailData.debit || detailData.credit) }}</td>
+                            <td>
+                                <strong>{{ detailData.accountId }}</strong>
+                                <span v-if="detailData.debitAmount > 0" class="text-debit"> (Nợ)</span>
+                                <span v-else-if="detailData.creditAmount > 0" class="text-credit"> (Có)</span>
+                            </td>
+
+                            <td>{{ detailData.partnerId ? 'Mã đối tượng: ' + detailData.partnerId : 'N/A' }}</td>
+
+                            <td class="text-right">
+                                <strong>
+                                    {{ formatMoney(detailData.debitAmount > 0 ? detailData.debitAmount :
+                                        detailData.creditAmount) }}
+                                </strong>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -50,15 +62,31 @@
 
 <script setup>
 const props = defineProps({
-    detailData: Object
+    detailData: {
+        type: Object,
+        default: null
+    }
 });
 
 defineEmits(['close']);
 
-const formatMoney = (val) => new Intl.NumberFormat('vi-VN').format(val) + ' đ';
+// Hàm format ngày tháng từ ISO sang dd/MM/yyyy
+const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return new Intl.DateTimeFormat('vi-VN').format(date);
+};
 
+// Hàm format tiền tệ
+const formatMoney = (val) => {
+    if (!val) return '0 đ';
+    return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
+};
+
+// Hàm xử lý in ấn (tạm thời gọi hàm in mặc định của trình duyệt)
 const printVoucher = () => {
-    window.print(); // Hoặc gọi logic in ấn riêng
+    window.print();
 };
 </script>
 
@@ -74,6 +102,32 @@ const printVoucher = () => {
     justify-content: center;
     align-items: center;
     z-index: 1000;
+}
+
+.close-btn {
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    /* Tạo vùng hover hình tròn */
+    font-size: 24px;
+    color: #8f9096;
+    /* Màu xám nhạt tinh tế */
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.close-btn:hover {
+    background-color: #f2f3f8;
+    /* Hiện nền xám nhạt khi di chuột vào */
+    color: #ff4d4f;
+    /* Chuyển sang màu đỏ cảnh báo tinh tế */
 }
 
 .modal-content {

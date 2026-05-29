@@ -1,39 +1,37 @@
-// service/ledger.service.js
 import axios from 'axios';
 
-const API_URL = 'https://your-api-domain.com/api/ledger';
+const API_BASE_URL = 'https://localhost:7047/api';
 
-export default {
+// Tạo một instance axios riêng cho dễ quản lý header/interceptors sau này
+const apiClient = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
+        // 'Authorization': 'Bearer ...' // Thêm token nếu đồ án có phần đăng nhập
+    }
+});
+
+export const ledgerApi = {
     /**
-     * Lấy danh sách sổ cái có lọc và phân trang
-     * @param {Object} params { startDate, endDate, accountCode, pageSize, pageNumber }
+     * Gọi API Lấy dữ liệu Sổ cái
+     * @param {Object} params - { FromDate, ToDate, AccountId, Keyword }
      */
-    async getAll(params) {
-        try {
-            // Giả lập gọi API thật
-            const response = await axios.get(`${API_URL}/get-all`, { params });
-            return response.data; 
-        } catch (error) {
-            console.error("Error fetching ledger:", error);
-            throw error;
-        }
+    fetchGeneralLedger(params) {
+        return apiClient.get('/ledger/general', { params });
     },
 
     /**
-     * Lấy chi tiết một chứng từ từ sổ cái
-     * @param {String} refId ID của chứng từ
+     * Gọi API Xuất file Excel
+     * @param {Object} params - { FromDate, ToDate, AccountId, Keyword }
      */
-    async getDetail(refId) {
-        return await axios.get(`${API_URL}/detail/${refId}`);
-    },
-
-    /**
-     * Xuất file Excel sổ cái
-     */
-    async exportExcel(params) {
-        return await axios.get(`${API_URL}/export`, { 
-            params, 
-            responseType: 'blob' // Quan trọng để tải file
+    exportExcel(params) {
+        return apiClient.get('/ledger/export', { 
+            params,
+            responseType: 'blob' // Rất quan trọng: Bắt buộc để tải file PDF/Excel
         });
+    },
+
+    getAccounts() {
+        return apiClient.get('/accounts');
     }
 };

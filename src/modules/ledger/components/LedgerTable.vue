@@ -8,144 +8,61 @@
                     <th class="text-center account-col">Tài khoản</th>
                     <th class="text-right money-col">Phát sinh Nợ</th>
                     <th class="text-right money-col">Phát sinh Có</th>
-
-                    <!-- Cột diễn giải rộng hơn và đứng trước Thao tác -->
                     <th class="description-col">Diễn giải</th>
-
-                    <!-- Cột thao tác nhỏ gọn -->
                     <th class="text-center action-col">Thao tác</th>
                 </tr>
             </thead>
 
             <tbody>
-                <!-- Loading -->
                 <tr v-if="loading">
                     <td colspan="7" class="text-center padding-box">
                         <div class="spinner"></div>
-                        <span class="loading-text">
-                            Đang tải dữ liệu...
-                        </span>
+                        <span class="loading-text">Đang tải dữ liệu...</span>
                     </td>
                 </tr>
 
-                <!-- Empty -->
                 <tr v-else-if="!loading && (!data || data.length === 0)">
                     <td colspan="7" class="text-center padding-box empty-state">
                         📁 Không có dữ liệu phát sinh trong khoảng thời gian này.
                     </td>
                 </tr>
 
-                <!-- Data -->
                 <template v-else>
 
-                    <!-- Số dư đầu kỳ -->
-                    <tr class="special-row opening-row">
-                        <td class="text-center">-</td>
-                        <td class="text-center">-</td>
-
-                        <td class="text-center font-semibold">
-                            {{ currentAccountCode }}
-                        </td>
-
-                        <td class="text-right font-semibold">
-                            {{ formatMoney(openingBalance, true) }}
-                        </td>
-
-                        <td class="text-right font-semibold">
-                            {{ formatMoney(openingBalance, false) }}
-                        </td>
-
-                        <td class="font-semibold description-col">
-                            Số dư đầu kỳ
-                        </td>
-
-                        <td class="text-center">-</td>
-                    </tr>
-
-                    <!-- Dữ liệu -->
                     <tr v-for="item in data" :key="item.id" class="data-row">
-                        <td class="text-center">
-                            {{ formatDate(item.date) }}
-                        </td>
+                        <td class="text-center">{{ formatDate(item.postingDate) }}</td>
 
                         <td class="text-center">
                             <span class="ref-no" @click="$emit('viewDetail', item)">
-                                {{ item.refNo }}
+                                {{ item.transactionGroupId }}
                             </span>
                         </td>
 
                         <td class="text-center">
-                            <span class="badge-account">
-                                {{ item.accountCode }}
-                            </span>
+                            <span class="badge-account">{{ item.accountId }}</span>
                         </td>
 
-                        <td class="text-right text-debit">
-                            {{ formatMoney(item.debit) }}
-                        </td>
+                        <td class="text-right text-debit">{{ formatMoney(item.debitAmount) }}</td>
+                        <td class="text-right text-credit">{{ formatMoney(item.creditAmount) }}</td>
 
-                        <td class="text-right text-credit">
-                            {{ formatMoney(item.credit) }}
-                        </td>
+                        <td class="description-col">{{ item.description }}</td>
 
-                        <!-- Diễn giải -->
-                        <td class="description-col">
-                            {{ item.description }}
-                        </td>
-
-                        <!-- Thao tác -->
                         <td class="text-center action-col">
                             <button @click="$emit('viewDetail', item)" class="btn-icon" title="Xem chi tiết">
-                                👁️
+                                <i class="far fa-eye"></i>
                             </button>
                         </td>
                     </tr>
 
-                    <!-- Tổng phát sinh -->
                     <tr class="special-row total-row">
                         <td class="text-center">-</td>
                         <td class="text-center">-</td>
                         <td class="text-center">-</td>
-
-                        <td class="text-right font-bold text-debit">
-                            {{ formatMoney(totalDebit) }}
-                        </td>
-
-                        <td class="text-right font-bold text-credit">
-                            {{ formatMoney(totalCredit) }}
-                        </td>
-
-                        <td class="font-semibold text-uppercase description-col">
-                            Cộng phát sinh trong kỳ
-                        </td>
-
+                        <td class="text-right font-bold text-debit">{{ formatMoney(totalDebit) }}</td>
+                        <td class="text-right font-bold text-credit">{{ formatMoney(totalCredit) }}</td>
+                        <td class="font-semibold text-uppercase description-col">Cộng phát sinh trong kỳ</td>
                         <td class="text-center">-</td>
                     </tr>
-
-                    <!-- Số dư cuối kỳ -->
-                    <tr class="special-row closing-row">
-                        <td class="text-center">-</td>
-                        <td class="text-center">-</td>
-
-                        <td class="text-center font-semibold">
-                            {{ currentAccountCode }}
-                        </td>
-
-                        <td class="text-right font-semibold">
-                            {{ formatMoney(closingBalance, true) }}
-                        </td>
-
-                        <td class="text-right font-semibold">
-                            {{ formatMoney(closingBalance, false) }}
-                        </td>
-
-                        <td class="font-semibold description-col">
-                            Số dư cuối kỳ
-                        </td>
-
-                        <td class="text-center">-</td>
-                    </tr>
-
                 </template>
             </tbody>
         </table>
@@ -154,71 +71,27 @@
 
 <script setup>
 const props = defineProps({
-    data: {
-        type: Array,
-        default: () => []
-    },
-
-    loading: {
-        type: Boolean,
-        default: false
-    },
-
-    openingBalance: {
-        type: Number,
-        default: 0
-    },
-
-    closingBalance: {
-        type: Number,
-        default: 0
-    },
-
-    totalDebit: {
-        type: Number,
-        default: 0
-    },
-
-    totalCredit: {
-        type: Number,
-        default: 0
-    },
-
-    currentAccountCode: {
-        type: String,
-        default: '---'
-    }
+    data: { type: Array, default: () => [] },
+    loading: { type: Boolean, default: false },
+    openingBalance: { type: Number, default: 0 },
+    closingBalance: { type: Number, default: 0 },
+    totalDebit: { type: Number, default: 0 },
+    totalCredit: { type: Number, default: 0 },
+    currentAccountCode: { type: String, default: '---' }
 });
 
 defineEmits(['viewDetail']);
 
-/**
- * Format ngày dd/mm/yyyy
- */
 const formatDate = (dateStr) => {
     if (!dateStr) return '-';
-
     const date = new Date(dateStr);
-
-    if (isNaN(date.getTime())) {
-        return dateStr;
-    }
-
+    if (isNaN(date.getTime())) return dateStr;
     return new Intl.DateTimeFormat('vi-VN').format(date);
 };
 
-/**
- * Format tiền tệ
- */
 const formatMoney = (val, isDebitType = null) => {
-    if (isDebitType !== null && val === 0) {
-        return '-';
-    }
-
-    if (!val || val === 0) {
-        return '-';
-    }
-
+    if (isDebitType !== null && val === 0) return '-';
+    if (!val || val === 0) return '-';
     return new Intl.NumberFormat('vi-VN').format(val);
 };
 </script>

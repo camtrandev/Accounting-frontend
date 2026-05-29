@@ -3,20 +3,20 @@
         <div class="filter-group">
             <div class="input-wrapper">
                 <label class="input-label">Từ ngày</label>
-                <input type="date" v-model="filters.startDate" class="form-control" />
+                <input type="date" v-model="filters.startDate" class="form-control" @keyup.enter="submitFilter" />
             </div>
 
             <div class="input-wrapper">
                 <label class="input-label">Đến ngày</label>
-                <input type="date" v-model="filters.endDate" class="form-control" />
+                <input type="date" v-model="filters.endDate" class="form-control" @keyup.enter="submitFilter" />
             </div>
 
             <div class="input-wrapper select-wrapper">
                 <label class="input-label">Tài khoản</label>
-                <select v-model="filters.accountNumber" class="form-control select-control">
+                <select v-model="filters.accountNumber" class="form-control select-control" @change="submitFilter">
                     <option value="">-- Tất cả tài khoản --</option>
-                    <option v-for="acc in accountList" :key="acc.id" :value="acc.code">
-                        {{ acc.code }} - {{ acc.name }}
+                    <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
+                        {{ acc.id }} - {{ acc.accountName }}
                     </option>
                 </select>
             </div>
@@ -24,7 +24,7 @@
             <div class="input-wrapper keyword-wrapper">
                 <label class="input-label">Tìm kiếm nhanh</label>
                 <input type="text" v-model="filters.keyword" placeholder="Số chứng từ, diễn giải..."
-                    class="form-control" />
+                    class="form-control" @keyup.enter="submitFilter" />
             </div>
         </div>
 
@@ -32,7 +32,7 @@
             <button class="btn-filter" @click="submitFilter">
                 <i class="fas fa-filter"></i> Lọc dữ liệu
             </button>
-            <button class="btn-export" @click="$emit('onExport')">
+            <button class="btn-export" @click="submitExport">
                 <i class="fas fa-file-excel"></i> Xuất Excel
             </button>
         </div>
@@ -40,9 +40,9 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, onMounted } from 'vue';
 
-// Nhận danh sách tài khoản từ component cha truyền vào (nếu có)
+// 1. Nhận danh sách tài khoản động từ API (do file LedgerPage truyền xuống)
 const props = defineProps({
     accounts: {
         type: Array,
@@ -50,27 +50,30 @@ const props = defineProps({
     }
 });
 
-// Data mẫu nếu không truyền từ cha (Bạn thay thế bằng danh sách thực tế của bạn)
-const accountList = ref(props.accounts.length ? props.accounts : [
-    { id: 1, code: '111', name: 'Tiền mặt' },
-    { id: 2, code: '112', name: 'Tiền gửi ngân hàng' },
-    { id: 3, code: '152', name: 'Nguyên liệu, vật liệu' },
-    { id: 4, code: '331', name: 'Phải trả cho người bán' },
-    { id: 5, code: '131', name: 'Phải thu của khách hàng' },
-]);
-
 const filters = reactive({
     startDate: '',
     endDate: '',
-    accountNumber: '', // Thêm field tài khoản
+    accountNumber: '',
     keyword: ''
+});
+
+// 2. Tự động set ngày đầu tháng và cuối tháng cho ô input UI không bị trống
+onMounted(() => {
+    const date = new Date();
+    filters.startDate = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    filters.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
 });
 
 const emit = defineEmits(['onFilter', 'onExport']);
 
+// 3. Hàm kích hoạt lọc (truyền cục data ra cho file cha gọi API)
 const submitFilter = () => {
-    // Gửi dữ liệu filter chuẩn chỉnh lên component cha xử lý API
     emit('onFilter', { ...filters });
+};
+
+// 4. Hàm kích hoạt xuất Excel
+const submitExport = () => {
+    emit('onExport', { ...filters });
 };
 </script>
 

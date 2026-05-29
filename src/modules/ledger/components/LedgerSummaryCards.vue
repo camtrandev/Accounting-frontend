@@ -6,13 +6,11 @@
         </div>
         <div class="card balance">
             <p><i class="fas fa-wallet"></i> Số Dư Cuối Kỳ</p>
-            <h3>{{ formatMoney(summaryData.balance ?? 0) }}</h3>
-        </div>
+            <h3>{{ formatMoney(summaryData.closingBalance ?? 0) }}</h3> </div>
         <div class="card debit">
             <p><i class="fas fa-arrow-down"></i> Tổng Phát Sinh Nợ</p>
             <h3>{{ formatMoney(summaryData.totalDebit ?? 0) }}</h3>
         </div>
-
         <div class="card credit">
             <p><i class="fas fa-arrow-up"></i> Tổng Phát Sinh Có</p>
             <h3>{{ formatMoney(summaryData.totalCredit ?? 0) }}</h3>
@@ -21,7 +19,6 @@
 </template>
 
 <script setup>
-// Nhận dữ liệu từ component cha
 defineProps({
     summaryData: {
         type: Object,
@@ -29,12 +26,11 @@ defineProps({
             openingBalance: 0,
             totalDebit: 0,
             totalCredit: 0,
-            balance: 0
+            closingBalance: 0
         })
     }
 });
 
-// Hàm định dạng tiền tệ Việt Nam VNĐ
 const formatMoney = (val) => {
     if (val === undefined || val === null) return '0 đ';
     return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
