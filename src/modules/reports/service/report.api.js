@@ -22,6 +22,9 @@ export const reportApi = {
     getPartners() {
         return apiClient.get('/Partner');
     },
+    getAccounts() {
+        return apiClient.get('/accounts');
+    },
 
     // ==========================================
     // 1. NHÓM TÀI CHÍNH - MỚI THÊM
@@ -51,10 +54,10 @@ export const reportApi = {
     },
     // Mới
     getInventoryDetail(params) {
-        return apiClient.get('/reports/inventory/detail', { params });
+        return apiClient.get('/inventory/detail', { params });
     },
     getSlowMovingItems(params) {
-        return apiClient.get('/reports/inventory/slow-moving', { params });
+        return apiClient.get('/inventory/slow-moving', { params });
     },
 
     // ==========================================
@@ -66,10 +69,12 @@ export const reportApi = {
     },
     // Mới
     getRevenueByItem(params) {
-        return apiClient.get('/reports/sales/revenue-by-item', { params });
+        // ĐÃ SỬA: Đổi /sales/ thành /financial/
+        return apiClient.get('/reports/financial/revenue-by-item', { params });
     },
     getDebtSummary(params) {
-        return apiClient.get('/reports/sales/debt-summary', { params });
+        // ĐÃ SỬA: Đổi /sales/ thành /financial/
+        return apiClient.get('/reports/financial/debt-summary', { params });
     },
 
     // ==========================================
@@ -84,6 +89,7 @@ export const reportApi = {
     },
     // Mới
     getCashBook(params) {
-        return apiClient.get('/reports/cash/cash-book', { params });
+        // Đường dẫn chuẩn xác lấy từ Swagger của bạn
+        return apiClient.get('/reports/financial/cash-book', { params });
     }
 };

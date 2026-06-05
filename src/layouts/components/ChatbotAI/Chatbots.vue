@@ -9,12 +9,24 @@ import imgBotBlue from '@/assets/Image/imgBotBlue.png'
 // State quản lý việc bot nào đang mở: 'ask', 'data', hoặc null
 const activeBot = ref(null)
 
+// State quản lý việc hiển thị 2 icon bot
+const isIconsVisible = ref(true)
+
 const toggleChat = (botType) => {
   activeBot.value = activeBot.value === botType ? null : botType
 }
 
 const hideChat = () => {
   activeBot.value = null
+}
+
+// Hàm xử lý ẩn/hiện cụm icon
+const toggleIcons = () => {
+  isIconsVisible.value = !isIconsVisible.value
+  // Tự động đóng cửa sổ chat nếu người dùng chọn ẩn icon
+  if (!isIconsVisible.value) {
+    hideChat()
+  }
 }
 </script>
 
@@ -37,16 +49,30 @@ const hideChat = () => {
       />
     </transition>
 
-    <div class="bot-icons-container">
-      <div class="bot-trigger" @click="toggleChat('ask')">
-        <img :src="imgBotGreen" alt="Bot Kế toán" />
-        <div v-if="activeBot === 'ask'" class="active-indicator"></div>
-      </div>
+    <div class="bot-controls">
       
-      <div class="bot-trigger" @click="toggleChat('data')">
-        <img :src="imgBotBlue" alt="Bot Dữ liệu" />
-        <div v-if="activeBot === 'data'" class="active-indicator"></div>
-      </div>
+      <button 
+        class="toggle-visibility-btn" 
+        @click="toggleIcons" 
+        :title="isIconsVisible ? 'Ẩn Chatbot' : 'Hiện Chatbot'"
+      >
+        {{ isIconsVisible ? '✖' : '💬' }}
+      </button>
+
+      <transition name="fade-slide">
+        <div v-show="isIconsVisible" class="bot-icons-container">
+          <div class="bot-trigger" @click="toggleChat('ask')">
+            <img :src="imgBotGreen" alt="Bot Kế toán" />
+            <div v-if="activeBot === 'ask'" class="active-indicator"></div>
+          </div>
+          
+          <div class="bot-trigger" @click="toggleChat('data')">
+            <img :src="imgBotBlue" alt="Bot Dữ liệu" />
+            <div v-if="activeBot === 'data'" class="active-indicator"></div>
+          </div>
+        </div>
+      </transition>
+      
     </div>
 
   </div>
@@ -61,21 +87,84 @@ const hideChat = () => {
   z-index: 9999;
 }
 
-.bot-icons-container { display: flex; flex-direction: column; gap: 15px; }
-.bot-trigger {
-  width: 60px; height: 60px; border-radius: 50%; cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: transform 0.2s;
-  position: relative; background: white; border: 2px solid white;
+/* Flexbox để sắp xếp nút toggle và cụm icon theo chiều dọc */
+.bot-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Căn giữa nút toggle với các icon */
+  gap: 10px;
 }
-.bot-trigger:hover { transform: scale(1.1); }
-.bot-trigger img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
+/* Style cho nút ẩn/hiện */
+.toggle-visibility-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  transition: all 0.2s ease;
+  z-index: 10;
+  font-size: 12px;
+}
+
+.toggle-visibility-btn:hover {
+  background-color: #f3f4f6;
+  transform: scale(1.1);
+  color: #374151;
+}
+
+.bot-icons-container { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 15px; 
+}
+
+.bot-trigger {
+  width: 60px; 
+  height: 60px; 
+  border-radius: 50%; 
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+  transition: transform 0.2s;
+  position: relative; 
+  background: white; 
+  border: 2px solid white;
+}
+
+.bot-trigger:hover { 
+  transform: scale(1.1); 
+}
+
+.bot-trigger img { 
+  width: 100%; 
+  height: 100%; 
+  border-radius: 50%; 
+  object-fit: cover; 
+}
 
 .active-indicator {
-  position: absolute; top: 0; right: 0; width: 15px; height: 15px;
-  background-color: #22c55e; border-radius: 50%; border: 2px solid white;
+  position: absolute; 
+  top: 0; 
+  right: 0; 
+  width: 15px; 
+  height: 15px;
+  background-color: #22c55e; 
+  border-radius: 50%; 
+  border: 2px solid white;
 }
 
-/* Hiệu ứng trượt */
-.fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.3s ease; }
-.fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateX(20px) scale(0.95); }
+/* Hiệu ứng trượt cho cửa sổ chat và cụm icon */
+.fade-slide-enter-active, .fade-slide-leave-active { 
+  transition: all 0.3s ease; 
+}
+.fade-slide-enter-from, .fade-slide-leave-to { 
+  opacity: 0; 
+  transform: translateX(20px) scale(0.95); 
+}
 </style>

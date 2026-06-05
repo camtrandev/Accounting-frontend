@@ -5,11 +5,11 @@
             <h2 class="page-title">{{ reportName }}</h2>
         </div>
 
-        <InventoryFilter :reportId="reportId" @filter="handleFetchData" />
+        <SalesFilter @filter="handleFetchData" />
 
         <div v-if="reportStore.isLoading" class="state-box loading-state">
             <div class="spinner"></div>
-            <p>Đang trích xuất dữ liệu kho từ hệ thống...</p>
+            <p>Đang tổng hợp số liệu kinh doanh...</p>
         </div>
 
         <div v-else-if="reportStore.error" class="state-box error-state">
@@ -17,11 +17,11 @@
             <p>{{ reportStore.error }}</p>
         </div>
 
-        <InventoryViewer v-else-if="currentReportData" :reportId="reportId" :data="currentReportData" />
+        <SalesViewer v-else-if="currentReportData" :reportId="reportId" :data="currentReportData" />
 
         <div v-else class="state-box empty-state">
-            <i class="fas fa-boxes text-4xl mb-3"></i>
-            <p>Vui lòng thiết lập thông số và bấm "Lọc dữ liệu"</p>
+            <i class="fas fa-file-invoice-dollar text-4xl mb-3"></i>
+            <p>Vui lòng chọn thời gian và bấm "Lọc dữ liệu"</p>
         </div>
     </div>
 </template>
@@ -30,8 +30,8 @@
 import { computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useReportStore } from '../store/report.store.js';
-import InventoryFilter from '../components/InventoryFilter.vue';
-import InventoryViewer from '../components/InventoryViewer.vue'; // Sẽ tạo ở bước 3
+import SalesFilter from '../components/SalesFilter.vue';
+import SalesViewer from '../components/SalesViewer.vue'; // Sẽ tạo ở bước 3
 
 const route = useRoute();
 const reportStore = useReportStore();
@@ -40,20 +40,17 @@ const reportId = computed(() => route.query.reportId);
 const reportName = computed(() => route.query.reportName);
 
 const currentReportData = computed(() => {
-    if (reportId.value === 'stock-report') return reportStore.stockReportData;
-    if (reportId.value === 'inventory-detail') return reportStore.inventoryDetailData;
-    if (reportId.value === 'slow-moving') return reportStore.slowMovingData;
+    if (reportId.value === 'revenue-by-item') return reportStore.revenueByItemData;
+    if (reportId.value === 'debt-summary') return reportStore.debtSummaryData;
     return null;
 });
 
 const handleFetchData = async (filterPayload) => {
     try {
-        if (reportId.value === 'stock-report') {
-            await reportStore.fetchStockReport(filterPayload);
-        } else if (reportId.value === 'inventory-detail') {
-            await reportStore.fetchInventoryDetail(filterPayload);
-        } else if (reportId.value === 'slow-moving') {
-            await reportStore.fetchSlowMovingItems(filterPayload);
+        if (reportId.value === 'revenue-by-item') {
+            await reportStore.fetchRevenueByItem(filterPayload);
+        } else if (reportId.value === 'debt-summary') {
+            await reportStore.fetchDebtSummary(filterPayload);
         }
     } catch (error) {
         console.error("Lỗi:", error);
@@ -62,15 +59,14 @@ const handleFetchData = async (filterPayload) => {
 
 onMounted(() => {
     reportStore.resetState();
-    // Clear dữ liệu cũ
-    reportStore.stockReportData = null;
-    reportStore.inventoryDetailData = null;
-    reportStore.slowMovingData = null;
+    // Xóa dữ liệu cũ khi mới vào trang
+    reportStore.revenueByItemData = [];
+    reportStore.debtSummaryData = [];
 });
 </script>
 
 <style scoped>
-/* CSS giống hệt FinancialReport.vue */
+/* CSS Dùng chung */
 .report-page {
     padding: 30px;
     background-color: #f8fafc;
@@ -125,7 +121,7 @@ onMounted(() => {
 
 .spinner {
     border: 4px solid #f1f5f9;
-    border-top: 4px solid #0ea5e9;
+    border-top: 4px solid #10b981;
     border-radius: 50%;
     width: 44px;
     height: 44px;

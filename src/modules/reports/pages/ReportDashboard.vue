@@ -1,9 +1,9 @@
 <template>
-    <div class="report-dashboard-container">
+    <div class="dashboard-page">
         <div class="page-header">
-            <div class="header-title-wrapper">
-                <h2 class="page-title">Trung tâm Báo cáo</h2>
-                <p class="page-subtitle">Quản lý và tra cứu các báo cáo hệ thống</p>
+            <div class="header-text">
+                <h2>Trung tâm Báo cáo</h2>
+                <p>Quản lý và tra cứu các báo cáo hệ thống</p>
             </div>
 
             <div class="search-box">
@@ -13,420 +13,245 @@
             </div>
         </div>
 
-        <div class="report-groups">
-            <div v-for="(group, index) in filteredReportGroups" :key="index" class="report-group-card">
-                <div class="group-header">
-                    <div class="icon-box" :class="group.colorClass">
-                        <i :class="group.icon"></i>
-                    </div>
-                    <h3 class="group-title">{{ group.title }}</h3>
-                </div>
+        <div class="report-grid">
+            <FinancialReportCard :reports="filteredFinancial" @open-report="handleOpenReport" />
 
-                <ul class="report-list">
-                    <li v-for="report in group.reports" :key="report.id" class="report-item"
-                        @click="openReport(report.route)">
-                        <div class="report-item-content">
-                            <i class="far fa-file-alt document-icon"></i>
-                            <span class="report-name" :title="report.name">{{ report.name }}</span>
-                        </div>
-                        <div class="action-area">
-                            <span class="view-text">Xem</span>
-                            <i class="fas fa-arrow-right arrow-icon"></i>
-                        </div>
-                    </li>
-                </ul>
-            </div>
+            <InventoryReportCard :reports="filteredInventory" @open-report="handleOpenReport" />
+
+            <SalesReportCard :reports="filteredSales" @open-report="handleOpenReport" />
+
+            <LedgerReportCard :reports="filteredLedger" @open-report="handleOpenReport" />
         </div>
 
-        <div v-if="filteredReportGroups.length === 0" class="empty-state">
-            <div class="empty-state-content">
-                <img src="https://cdn-icons-png.flaticon.com/512/7486/7486754.png" alt="No reports"
-                    class="empty-icon" />
-                <h3>Không tìm thấy kết quả</h3>
-                <p>Không có báo cáo nào phù hợp với từ khóa <strong>"{{ searchQuery }}"</strong></p>
-                <button @click="searchQuery = ''" class="btn-clear-search">Xóa tìm kiếm</button>
-            </div>
+        <div v-if="isAllEmpty" class="empty-state">
+            <i class="fas fa-box-open empty-icon"></i>
+            <h3>Không tìm thấy kết quả</h3>
+            <p>Không có báo cáo nào phù hợp với từ khóa <strong>"{{ searchQuery }}"</strong></p>
+            <button @click="searchQuery = ''" class="btn-clear">Xóa tìm kiếm</button>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 
-const router = useRouter()
-const searchQuery = ref('')
+// Import 4 component con
+import FinancialReportCard from '../components/FinancialReportCard.vue';
+import InventoryReportCard from '../components/InventoryReportCard.vue';
+import SalesReportCard from '../components/SalesReportCard.vue';
+import LedgerReportCard from '../components/LedgerReportCard.vue';
 
-const reportGroups = ref([
-    {
-        title: 'Báo cáo Tài chính',
-        icon: 'fas fa-chart-line', // Icon biểu đồ xu hướng
-        colorClass: 'theme-purple',
-        reports: [
-            { id: 'f1', name: 'Bảng cân đối kế toán', route: 'ReportBalanceSheet' },
-            { id: 'f2', name: 'Báo cáo kết quả hoạt động kinh doanh', route: 'ReportPNL' },
-            { id: 'f3', name: 'Báo cáo lưu chuyển tiền tệ', route: 'ReportCashFlow' }
-        ]
-    },
-    {
-        title: 'Báo cáo Kho - Vật tư',
-        icon: 'fas fa-warehouse', // Icon nhà kho chuyên dụng
-        colorClass: 'theme-blue',
-        reports: [
-            { id: 'i1', name: 'Báo cáo tổng hợp tồn kho', route: 'ReportInventorySummary' },
-            { id: 'i2', name: 'Sổ chi tiết vật tư hàng hóa', route: 'ReportInventoryDetail' },
-            { id: 'i3', name: 'Báo cáo hàng chậm luân chuyển', route: 'ReportSlowMoving' }
-        ]
-    },
-    {
-        title: 'Bán hàng & Công nợ',
-        icon: 'fas fa-file-invoice-dollar', // Icon hóa đơn & tiền tệ
-        colorClass: 'theme-green',
-        reports: [
-            { id: 's1', name: 'Tổng hợp doanh thu theo mặt hàng', route: 'ReportSalesByItem' },
-            { id: 's2', name: 'Tổng hợp công nợ phải thu khách hàng', route: 'ReportReceivables' }
-        ]
-    },
-    {
-        title: 'Sổ cái & Tiền mặt',
-        icon: 'fas fa-vault', // Icon két sắt/ngân quỹ
-        colorClass: 'theme-orange',
-        reports: [
-            { id: 'c1', name: 'Sổ nhật ký chung', route: 'ReportGeneralJournal' },
-            { id: 'c2', name: 'Sổ quỹ tiền mặt', route: 'ReportCashBook' }
-        ]
+const router = useRouter();
+const searchQuery = ref('');
+
+// Quản lý State: Phân tách rõ 4 danh sách báo cáo
+const financialReports = ref([
+    { id: 'balance-sheet', name: 'Bảng cân đối kế toán' },
+    { id: 'income-statement', name: 'Báo cáo kết quả hoạt động kinh doanh' },
+    
+]);
+
+const inventoryReports = ref([
+    { id: 'stock-report', name: 'Báo cáo tổng hợp tồn kho' },
+    { id: 'inventory-detail', name: 'Sổ chi tiết vật tư hàng hóa' },
+]);
+
+const salesReports = ref([
+    { id: 'revenue-by-item', name: 'Tổng hợp doanh thu theo mặt hàng' },
+    { id: 'debt-summary', name: 'Tổng hợp công nợ phải thu khách hàng' }
+]);
+
+const ledgerReports = ref([
+    { id: 'general-ledger', name: 'Sổ nhật ký chung' },
+    { id: 'cash-book', name: 'Sổ quỹ tiền mặt' }
+]);
+
+// Hàm Helper để tái sử dụng logic filter
+const filterReports = (reportsArray) => {
+    if (!searchQuery.value) return reportsArray;
+    const query = searchQuery.value.toLowerCase();
+    return reportsArray.filter(r => r.name.toLowerCase().includes(query));
+};
+
+// Computed Properties để tự động lọc khi người dùng gõ tìm kiếm
+const filteredFinancial = computed(() => filterReports(financialReports.value));
+const filteredInventory = computed(() => filterReports(inventoryReports.value));
+const filteredSales = computed(() => filterReports(salesReports.value));
+const filteredLedger = computed(() => filterReports(ledgerReports.value));
+
+// Tính toán xem có phải tất cả các mảng đều rỗng hay không (để hiện màn hình trống)
+const isAllEmpty = computed(() => {
+    return filteredFinancial.value.length === 0 &&
+        filteredInventory.value.length === 0 &&
+        filteredSales.value.length === 0 &&
+        filteredLedger.value.length === 0;
+});
+
+// Điều hướng tập trung
+const handleOpenReport = (report) => {
+    let targetRouteName = '';
+
+    // 1. Nhóm Báo cáo Tài chính
+    if (['balance-sheet', 'income-statement'].includes(report.id)) {
+        targetRouteName = 'FinancialReport';
+    } 
+    // 2. Nhóm Báo cáo Kho - Vật tư
+    else if (['stock-report', 'inventory-detail', 'slow-moving'].includes(report.id)) {
+        targetRouteName = 'InventoryReport';
     }
-])
+    // 3. Nhóm Báo cáo Bán hàng & Công nợ
+    else if (['revenue-by-item', 'debt-summary'].includes(report.id)) {
+        targetRouteName = 'SalesReport';
+    }
+    // 4. Nhóm Sổ cái & Tiền mặt
+    else if (['general-ledger', 'cash-book'].includes(report.id)) {
+        targetRouteName = 'LedgerReport';
+    }
+    
+    // Nếu chưa được cấu hình thì báo lỗi ra console để debug
+    if (!targetRouteName) {
+        console.warn('Chưa cấu hình Route cho báo cáo có ID:', report.id);
+        return;
+    }
 
-const filteredReportGroups = computed(() => {
-    if (!searchQuery.value) return reportGroups.value
-    const query = searchQuery.value.toLowerCase()
-    return reportGroups.value.map(group => {
-        const filteredReports = group.reports.filter(r => r.name.toLowerCase().includes(query))
-        return { ...group, reports: filteredReports }
-    }).filter(group => group.reports.length > 0)
-})
-
-const openReport = (routeName) => {
-    if (!routeName) return
-    console.log('Điều hướng đến Báo cáo:', routeName)
-}
+    // Thực hiện chuyển hướng kèm theo param để trang con biết đang xem báo cáo nào
+    router.push({
+        name: targetRouteName,
+        query: { reportId: report.id, reportName: report.name }
+    });
+};
 </script>
 
 <style scoped>
-/* FIX TRÀN LAYOUT CHUẨN: Ép tất cả phần tử tôn trọng border */
-*,
-*::before,
-*::after {
-    box-sizing: border-box;
+.dashboard-page {
+    padding: 30px;
+    background-color: #f8fafc;
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
 }
 
-/* 1. KHÓA KHUNG CONTAINER */
-.report-dashboard-container {
-    width: 100%;
-    min-width: 0;
-    padding: 24px 32px;
-    background-color: transparent;
-    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
-    overflow-x: hidden;
-}
-
-/* Header */
 .page-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-    gap: 16px;
-    width: 100%;
+    align-items: center;
+    margin-bottom: 30px;
 }
 
-.header-title-wrapper {
-    flex: 1;
-    min-width: 250px;
-}
-
-.page-title {
+.header-text h2 {
     font-size: 24px;
     font-weight: 700;
     color: #1e293b;
     margin: 0 0 4px 0;
 }
 
-.page-subtitle {
-    margin: 0;
-    color: #64748b;
+.header-text p {
     font-size: 14px;
+    color: #64748b;
+    margin: 0;
 }
 
-/* Ô tìm kiếm linh hoạt */
 .search-box {
     position: relative;
-    width: 100%;
-    max-width: 320px;
-    flex-shrink: 0;
-}
-
-.search-box .search-icon {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #94a3b8;
-    font-size: 14px;
-}
-
-.search-box .clear-icon {
-    position: absolute;
-    right: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #cbd5e1;
-    cursor: pointer;
-    font-size: 14px;
-}
-
-.search-box .clear-icon:hover {
-    color: #ef4444;
+    width: 320px;
 }
 
 .search-box input {
     width: 100%;
-    height: 42px;
-    padding: 0 36px;
+    padding: 10px 36px;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    background-color: #ffffff;
+    border-radius: 8px;
     font-size: 14px;
-    color: #334155;
     outline: none;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    background: white;
     transition: all 0.3s;
 }
 
 .search-box input:focus {
     border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-/* 2. LƯỚI BÁO CÁO: Luôn chia tối đa 2 cột trên màn hình rộng */
-.report-groups {
+.search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+}
+
+.clear-icon {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    cursor: pointer;
+}
+
+.clear-icon:hover {
+    color: #ef4444;
+}
+
+.report-grid {
     display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 24px;
-    width: 100%;
-    max-width: 1600px;
-    /* Chống bị kéo giãn quá mức trên màn hình cực to */
 }
 
-@media (min-width: 768px) {
-    .report-groups {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 1024px) {
+    .report-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 20px;
+    }
+
+    .search-box {
+        width: 100%;
     }
 }
 
-/* Cards bo góc, bóng đổ mịn */
-.report-group-card {
-    background: #ffffff;
-    border-radius: 16px;
-    padding: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-    border: 1px solid #f1f5f9;
-    transition: transform 0.2s, box-shadow 0.2s;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.report-group-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
-}
-
-.group-header {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px dashed #e2e8f0;
-}
-
-.icon-box {
-    width: 42px;
-    height: 42px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    flex-shrink: 0;
-}
-
-.theme-purple {
-    background-color: #f3e8ff;
-    color: #9333ea;
-}
-
-.theme-blue {
-    background-color: #e0f2fe;
-    color: #0284c7;
-}
-
-.theme-green {
-    background-color: #dcfce7;
-    color: #16a34a;
-}
-
-.theme-orange {
-    background-color: #ffedd5;
-    color: #ea580c;
-}
-
-.group-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #0f172a;
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.report-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-/* Hover Items */
-.report-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: 1px solid transparent;
-}
-
-.report-item-content {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex: 1;
-}
-
-.document-icon {
-    color: #94a3b8;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.report-name {
-    color: #475569;
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.action-area {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    opacity: 0;
-    transform: translateX(-5px);
-    transition: all 0.3s;
-    flex-shrink: 0;
-}
-
-.view-text {
-    font-size: 12px;
-    font-weight: 600;
-    color: #6366f1;
-}
-
-.arrow-icon {
-    font-size: 11px;
-    color: #6366f1;
-}
-
-.report-item:hover {
-    background-color: #f8fafc;
-    border-color: #e2e8f0;
-}
-
-.report-item:hover .document-icon {
-    color: #6366f1;
-}
-
-.report-item:hover .report-name {
-    color: #0f172a;
-}
-
-.report-item:hover .action-area {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-/* Empty State */
 .empty-state {
-    display: flex;
-    justify-content: center;
-    padding: 60px 20px;
-    width: 100%;
-}
-
-.empty-state-content {
     text-align: center;
-    background: #ffffff;
-    padding: 40px;
+    padding: 60px 20px;
+    background: white;
     border-radius: 16px;
     border: 1px dashed #cbd5e1;
-    width: 100%;
-    max-width: 400px;
+    margin-top: 20px;
 }
 
 .empty-icon {
-    width: 64px;
-    height: 64px;
+    font-size: 48px;
+    color: #cbd5e1;
     margin-bottom: 16px;
-    opacity: 0.6;
 }
 
-.empty-state-content h3 {
+.empty-state h3 {
     margin: 0 0 8px 0;
     color: #1e293b;
-    font-size: 16px;
 }
 
-.empty-state-content p {
+.empty-state p {
     color: #64748b;
-    margin: 0 0 20px 0;
-    font-size: 13px;
+    margin-bottom: 16px;
 }
 
-.btn-clear-search {
-    background-color: #6366f1;
-    color: white;
+.btn-clear {
+    background: #eff6ff;
+    color: #3b82f6;
     border: none;
     padding: 8px 16px;
     border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
     cursor: pointer;
-    transition: 0.2s;
+    font-weight: 600;
+    transition: background 0.2s;
 }
 
-.btn-clear-search:hover {
-    background-color: #4f46e5;
+.btn-clear:hover {
+    background: #dbeafe;
 }
 </style>

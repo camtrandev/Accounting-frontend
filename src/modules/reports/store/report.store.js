@@ -1,16 +1,17 @@
 import { defineStore } from 'pinia';
-import { reportApi } from './report.api';
+import { reportApi } from '../service/report.api';
 
 export const useReportStore = defineStore('reportStore', {
     state: () => ({
         isLoading: false,
         isExporting: false, // Trạng thái riêng khi đang tải file Excel
         error: null,
-        
+
         // 0. Master Data
         warehouses: [],
         items: [],
         partners: [],
+        accounts: [],
 
         // 1. Tài chính
         incomeStatementData: null,
@@ -29,7 +30,8 @@ export const useReportStore = defineStore('reportStore', {
 
         // 4. Sổ cái & Tiền mặt
         generalLedgerData: null,     // Cũ
-        cashBookData: null           // Mới
+        cashBookData: null,
+        accounts: []
     }),
 
     actions: {
@@ -137,22 +139,53 @@ export const useReportStore = defineStore('reportStore', {
         // 4. ACTIONS SỔ CÁI & TIỀN MẶT
         // ==========================================
         async fetchGeneralLedger(params) {
-            this.resetState(); this.isLoading = true;
+            this.isLoading = true;
+            this.error = null;
             try {
                 const res = await reportApi.getGeneralLedger(params);
                 this.generalLedgerData = res.data;
-            } catch (err) { this.error = err.message; }
-            finally { this.isLoading = false; }
+            } catch (err) {
+                this.error = err.message || "Lỗi khi tải Sổ nhật ký chung";
+            } finally {
+                this.isLoading = false;
+            }
         },
+
         async fetchCashBook(params) {
-            this.resetState(); this.isLoading = true;
+            this.isLoading = true;
+            this.error = null;
             try {
                 const res = await reportApi.getCashBook(params);
                 this.cashBookData = res.data;
-            } catch (err) { this.error = err.message; }
-            finally { this.isLoading = false; }
+            } catch (err) {
+                this.error = err.message || "Lỗi khi tải Sổ quỹ tiền mặt";
+            } finally {
+                this.isLoading = false;
+            }
         },
-
+        async fetchAccounts() {
+            // Nếu đã có data rồi thì bỏ qua
+            if (this.accounts && this.accounts.length > 0) return;
+            
+            try {
+                const res = await reportApi.getAccounts(); 
+                
+                // KIỂM TRA LINH HOẠT: 
+                // Nếu Backend bọc data trong res.data.data (hoặc items, results...) thì lấy nó ra
+                let responseData = res.data.data || res.data.items || res.data;
+                
+                // Ép kiểu kiểm tra xem nó có đúng là mảng không
+                if (Array.isArray(responseData)) {
+                    this.accounts = responseData;
+                    console.log("✅ ĐÃ LẤY THÀNH CÔNG TÀI KHOẢN:", this.accounts);
+                } else {
+                    console.error("❌ Dữ liệu API /accounts không phải là Mảng (Array)!", responseData);
+                    this.accounts = []; // Tránh lỗi v-for
+                }
+            } catch (error) {
+                console.error("❌ Lỗi gọi API /accounts:", error);
+            }
+        },
         // ==========================================
         // 5. HELPER: XUẤT FILE EXCEL (Dùng chung)
         // ==========================================

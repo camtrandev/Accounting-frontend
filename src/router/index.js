@@ -74,6 +74,28 @@ const routes = [
         meta: { requiresAuth: true, role: 'Admin' } // Chỉ Admin mới vào được
       },
 
+      {
+        path: '/financial-report',
+        name: 'FinancialReport', // Tên này phải khớp chính xác với name trong router.push
+        component: () => import('../../src/modules/reports/pages/FinancialReport.vue')
+
+      },
+      {
+        path: '/reports/inventory',
+        name: 'InventoryReport',
+        component: () => import('../../src/modules/reports/pages/InventoryReport.vue')
+      },
+      {
+        path: '/reports/sales',
+        name: 'SalesReport',
+        component: () => import('../../src/modules/reports/pages/SalesReport.vue')
+    },
+    {
+        path: '/reports/ledger',
+        name: 'LedgerReport',
+        component: () => import('../../src/modules/reports/pages/LedgerReport.vue')
+    }
+
     ]
   },
   // Catch-all route
