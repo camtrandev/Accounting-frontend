@@ -13,7 +13,6 @@ import BottomSection from "../components/Business_Insights_footer/BottomSection.
     <!-- Toolbar -->
     <DashboardToolbar />
 
-    <BottomSection />
 
     <StatCardList />
 

@@ -1,6 +1,5 @@
 <template>
   <div>
-    <!-- Scroll dọc và ngang -->
     <div class="table-scroll">
       <table class="inventory-table">
         <colgroup>
@@ -13,7 +12,7 @@
           <col style="width: auto;" />
           <col style="width: 11%;" />
           <col style="width: 11%;" />
-          <col style="width: 6%;" />
+          <col style="width: 90px;" />
         </colgroup>
 
         <thead>
@@ -27,7 +26,7 @@
             <th>Diễn giải</th>
             <th class="text-right">Tổng tiền</th>
             <th class="text-center">Trạng thái</th>
-            <th class="text-center">Thao tác</th>
+            <th class="text-center sticky-col">Thao tác</th>
           </tr>
         </thead>
 
@@ -75,7 +74,7 @@
                 </span>
               </div>
             </td>
-            <td>
+            <td class="sticky-col">
               <div class="actions-wrapper">
                 <button class="action-btn text-blue-600" title="Xem/Sửa" @click="emit('edit', item)">
                   <i class="fas fa-edit"></i>
@@ -90,7 +89,6 @@
       </table>
     </div>
 
-    <!-- Pagination -->
     <div class="pagination-wrapper" v-if="items.length > 0 && pagination">
       <div class="pagination-info">
         Hiển thị <span class="font-semibold text-gray-800">{{ startIndex }}-{{ endIndex }}</span>
@@ -181,7 +179,6 @@ const getTypeName = (type) => {
 <style scoped>
 .table-scroll {
   max-height: 430px;
-  /* Chiều cao tối đa, chỉnh theo ý bạn */
   overflow-y: auto;
   overflow-x: auto;
   border: 1px solid #e5e7eb;
@@ -198,10 +195,35 @@ const getTypeName = (type) => {
   z-index: 10;
 }
 
-/* Giữ nguyên CSS cũ */
+/* --- ĐOẠN CSS THÊM MỚI ĐỂ STICKY CỘT CUỐI --- */
+.inventory-table .sticky-col {
+  position: sticky;
+  right: 0;
+  background-color: #ffffff;
+  /* Đổ nền đặc để không lộ chữ bên dưới khi cuộn qua */
+  z-index: 5;
+  box-shadow: -4px 0 8px -4px rgba(0, 0, 0, 0.12);
+  /* Tạo đổ bóng nhẹ bên trái tạo cảm giác tách biệt */
+}
+
+/* Ưu tiên z-index cho ô Header ở góc giao nhau (vừa sticky top vừa sticky right) */
+.inventory-table thead th.sticky-col {
+  z-index: 15;
+  background-color: #f9fafb;
+}
+
+/* Đảm bảo khi hover dòng thì cột đang sticky cũng đổi màu theo */
+.table-row:hover .sticky-col {
+  background-color: #f8fafc;
+}
+
+/* ------------------------------------------- */
+
 .inventory-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  /* Đổi từ collapse sang separate để box-shadow và viền hoạt động chuẩn với sticky */
+  border-spacing: 0;
   min-width: 1400px;
 }
 

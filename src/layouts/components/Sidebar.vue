@@ -36,7 +36,7 @@ const isVoucherOpen = ref(isVoucherRoute.value);
     <aside class="sidebar" :class="{ collapse: isCollapse }">
 
         <div class="sidebar-header">
-            <h2 v-if="!isCollapse">Accounting</h2>
+            <h2 v-if="!isCollapse">Phần mềm kế toán</h2>
             <div v-if="!isCollapse && authStore.user" class="user-badge">
                 {{ authStore.user.username }} ({{ authStore.userRole }})
             </div>

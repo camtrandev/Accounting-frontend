@@ -1,0 +1,39 @@
+/* ==========================================================================
+   fontStyle.css - Ép đồng nhất font chữ Inter cho toàn bộ hệ thống (FIX TRIỆT ĐỂ ICON)
+   ========================================================================== */
+
+/* 1. Nhúng font Inter từ Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* 2. Áp dụng font Inter cho toàn bộ văn bản gốc */
+body, html, p, span, div, h1, h2, h3, h4, h5, h6, td, th, a, li, ul, ol {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* 3. Khử font mặc định của các thẻ nhập liệu và nút bấm */
+input,
+button,
+select,
+textarea,
+optgroup {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+}
+
+/* 4. Đảm bảo các khối hiển thị mã nguồn (code) vẫn giữ font Monospace để dễ đọc */
+code,
+pre,
+kbd,
+samp,
+.mono-text {
+    font-family: ui-monospace, Consolas, "Liberation Mono", Menlo, monospace !important;
+}
+
+/* 5. PHÁC ĐỒ BẢO VỆ FONT AWESOME: Khôi phục lại font gốc cho tất cả các thẻ i và pseudo-element của icon */
+i[class*="fa-"], 
+[class*="fa-"]::before, 
+[class*="fa-"]::after,
+.fa, .fas, .far, .fab, .fal, .fad {
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+    font-weight: 900 !important; /* Đảm bảo icon solid hiển thị đúng độ đậm */
+    font-style: normal !important;
+}
