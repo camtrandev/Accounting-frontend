@@ -2,18 +2,25 @@
   <div class="chart-card">
     <div class="card-header">
       <h3>Doanh thu - Chi phí - Lợi nhuận</h3>
-      <select>
-        <option>Năm 2026</option>
+      <select v-model="selectedYear" @change="fetchData">
+        <option :value="2026">Năm 2026</option>
+        <option :value="2025">Năm 2025</option>
       </select>
     </div>
 
-    <div class="chart-wrapper">
+    <div v-if="dashboardStore.isLoading" class="loading-state">
+      Đang tải biểu đồ...
+    </div>
+
+    <div v-else class="chart-wrapper">
       <Line :data="chartData" :options="chartOptions" />
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, computed } from "vue"
+import { useDashboardStore } from "../store/dashboardStore" // Đường dẫn store
 import { Line } from "vue-chartjs"
 import {
   Chart,
@@ -25,53 +32,63 @@ import {
   Legend
 } from "chart.js"
 
-Chart.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend
-)
+Chart.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
 
-/* Data */
-const chartData = {
-  labels: [
-    "T1","T2","T3","T4","T5","T6",
-    "T7","T8","T9","T10","T11","T12"
-  ],
-  datasets: [
-    {
-      label: "Doanh thu",
-      data: [700,850,900,1000,1100,1150, 1200,1180,1250,1300,1280,1350],
-      borderColor: "#2563eb",
-      tension: 0.4
-    },
-    {
-      label: "Chi phí",
-      data: [400,550,600,650,700,680, 720,750,800,850,820,900],
-      borderColor: "#dc2626",
-      tension: 0.4
-    },
-    {
-      label: "Lợi nhuận",
-      data: [100,150,180,220,250,240, 260,280,300,320,310,350],
-      borderColor: "#16a34a",
-      tension: 0.4
-    }
-  ]
+const dashboardStore = useDashboardStore()
+const selectedYear = ref(2026)
+
+// Hàm fetch dữ liệu khi đổi năm (Tùy chọn)
+const fetchData = () => {
+  dashboardStore.fetchAllDashboardData(null, selectedYear.value)
 }
+
+/* CHUYỂN ĐỔI DATA TỪ API SANG CHART.JS */
+const chartData = computed(() => {
+  const rawData = dashboardStore.revenueExpenseChart
+
+  // Rút trích dữ liệu. Nếu chưa có data thì mảng rỗng
+  const revenues = rawData.map(item => item.revenue || 0)
+  const expenses = rawData.map(item => item.expense || 0)
+  const profits = rawData.map(item => item.profit || 0)
+
+  return {
+    labels: ["T1","T2","T3","T4","T5","T6","T7","T8","T9","T10","T11","T12"],
+    datasets: [
+      {
+        label: "Doanh thu",
+        data: revenues,
+        borderColor: "#2563eb",
+        tension: 0.4
+      },
+      {
+        label: "Chi phí",
+        data: expenses,
+        borderColor: "#dc2626",
+        tension: 0.4
+      },
+      {
+        label: "Lợi nhuận",
+        data: profits,
+        borderColor: "#16a34a",
+        tension: 0.4
+      }
+    ]
+  }
+})
 
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   layout: {
-    padding: {
-      bottom: 10 // Thêm một chút khoảng trống ở đáy cho thoáng
-    }
+    padding: { bottom: 10 }
   }
 }
 </script>
+
+<style scoped>
+/* Giữ nguyên CSS cũ của bạn */
+.loading-state { text-align: center; padding: 50px; color: #666; }
+</style>
 
 <style scoped>
 .chart-card {

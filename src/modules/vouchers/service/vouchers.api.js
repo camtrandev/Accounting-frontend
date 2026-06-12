@@ -88,6 +88,11 @@ export const vouchersApi = {
         return res.data;
     },
 
+    getAllDocuments: async () => {
+        const response = await axios.get(`${API_BASE_URL}/api/documents`);
+        return response.data;
+    },
+
     // Từ chối chứng từ
     rejectVoucher: async (id) => {
         const res = await axios.post(`${API_BASE_URL}/api/documents/${id}/reject`);

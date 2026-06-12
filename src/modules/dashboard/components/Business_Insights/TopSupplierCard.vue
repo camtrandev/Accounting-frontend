@@ -2,64 +2,87 @@
   <div class="card">
     <div class="card-header">
       <h3>Top 5 nhà cung cấp</h3>
-      <select>
-        <option>Năm 2026</option>
+      <select v-model="selectedYear" @change="fetchData">
+        <option :value="2026">Năm 2026</option>
+        <option :value="2025">Năm 2025</option>
       </select>
     </div>
 
-    <div class="list">
+    <div v-if="dashboardStore.isLoading" class="loading-state">
+      Đang tải dữ liệu...
+    </div>
+
+    <div v-else class="list">
       <div v-for="item in suppliers" :key="item.name" class="row">
-        <div class="name">
+        <div class="name" :title="item.name">
           {{ item.name }}
         </div>
         <div class="bar-wrapper">
-          <div
-            class="bar"
-            :style="{ width: item.percent + '%', backgroundColor: item.color }"
-          ></div>
+          <div class="bar" :style="{ width: item.percent + '%', backgroundColor: item.color }"></div>
         </div>
         <div class="value">
           {{ item.value }}
         </div>
+      </div>
+
+      <div v-if="suppliers.length === 0" class="empty-state">
+        Chưa có dữ liệu nhà cung cấp
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-const suppliers = [
-  {
-    name: "Công ty TNHH Nhà cung cấp A",
-    percent: 90,
-    value: "220.000.000 đ",
-    color: "#ef4444" // Đỏ đậm
-  },
-  {
-    name: "Công ty Cổ phần B",
-    percent: 75,
-    value: "180.000.000 đ",
-    color: "#f87171" // Đỏ nhạt hơn
-  },
-  {
-    name: "Công ty TNHH C",
-    percent: 60,
-    value: "150.000.000 đ",
-    color: "#fca5a5" 
-  },
-  {
-    name: "Công ty Cổ phần D",
-    percent: 45,
-    value: "100.000.000 đ",
-    color: "#fecaca" 
-  },
-  {
-    name: "Công ty TNHH E",
-    percent: 30,
-    value: "70.000.000 đ",
-    color: "#fee2e2" // Đỏ rất nhạt
-  }
-]
+import { ref, computed } from "vue"
+import { useDashboardStore } from "../../store/dashboardStore"
+
+const dashboardStore = useDashboardStore()
+const selectedYear = ref(2026)
+
+// Bảng màu tone Đỏ giống thiết kế
+const colors = ["#ef4444", "#f87171", "#fca5a5", "#fecaca", "#fee2e2"]
+
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('vi-VN').format(value) + " đ"
+}
+
+const fetchData = () => {
+  dashboardStore.fetchAllDashboardData(null, selectedYear.value)
+}
+
+const suppliers = computed(() => {
+  const rawData = dashboardStore.topSuppliers || []
+  if (rawData.length === 0) return []
+
+  const maxAmount = Math.max(...rawData.map(item => item.totalAmount))
+
+  return rawData.map((item, index) => {
+    const percent = maxAmount > 0 ? (item.totalAmount / maxAmount) * 100 : 0
+    return {
+      name: item.partnerName,
+      percent: percent,
+      value: formatCurrency(item.totalAmount),
+      color: colors[index % colors.length]
+    }
+  })
+})
 </script>
+
+<style scoped>
+.loading-state,
+.empty-state {
+  text-align: center;
+  color: #999;
+  padding: 20px 0;
+}
+
+.name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+</style>
 
 <style scoped>
 .card {
@@ -75,7 +98,7 @@ const suppliers = [
   justify-content: space-between;
   align-items: center;
   /* Tăng từ 20px lên 36px để cách xa dòng đầu tiên hơn */
-  margin-bottom: 60px; 
+  margin-bottom: 60px;
 }
 
 h3 {
@@ -102,10 +125,11 @@ select {
 .row {
   display: grid;
   /* Lưu ý: Giữ nguyên grid-template-columns cũ của từng file nhé */
-  grid-template-columns: 160px 1fr 110px; /* Của file Khách hàng (File Nhà cung cấp là 180px) */
+  grid-template-columns: 160px 1fr 110px;
+  /* Của file Khách hàng (File Nhà cung cấp là 180px) */
   align-items: center;
   /* Tăng từ 16px lên 28px để các dòng dãn xa nhau ra */
-  margin-bottom: 28px; 
+  margin-bottom: 28px;
   gap: 12px;
 }
 
@@ -127,7 +151,7 @@ select {
   height: 12px;
   display: flex;
   align-items: center;
-  border-left: 2px solid #f3f4f6; 
+  border-left: 2px solid #f3f4f6;
 }
 
 .bar {

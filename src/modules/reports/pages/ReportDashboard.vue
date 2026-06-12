@@ -15,12 +15,7 @@
 
         <div class="report-grid">
             <FinancialReportCard :reports="filteredFinancial" @open-report="handleOpenReport" />
-
             <InventoryReportCard :reports="filteredInventory" @open-report="handleOpenReport" />
-
-            <SalesReportCard :reports="filteredSales" @open-report="handleOpenReport" />
-
-            <LedgerReportCard :reports="filteredLedger" @open-report="handleOpenReport" />
         </div>
 
         <div v-if="isAllEmpty" class="empty-state">
@@ -36,35 +31,22 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 
-// Import 4 component con
+// Chỉ giữ lại import 2 component còn sử dụng
 import FinancialReportCard from '../components/FinancialReportCard.vue';
 import InventoryReportCard from '../components/InventoryReportCard.vue';
-import SalesReportCard from '../components/SalesReportCard.vue';
-import LedgerReportCard from '../components/LedgerReportCard.vue';
 
 const router = useRouter();
 const searchQuery = ref('');
 
-// Quản lý State: Phân tách rõ 4 danh sách báo cáo
+// Quản lý State: Phân tách rõ các danh sách báo cáo
 const financialReports = ref([
     { id: 'balance-sheet', name: 'Bảng cân đối kế toán' },
     { id: 'income-statement', name: 'Báo cáo kết quả hoạt động kinh doanh' },
-    
 ]);
 
 const inventoryReports = ref([
     { id: 'stock-report', name: 'Báo cáo tổng hợp tồn kho' },
     { id: 'inventory-detail', name: 'Sổ chi tiết vật tư hàng hóa' },
-]);
-
-const salesReports = ref([
-    { id: 'revenue-by-item', name: 'Tổng hợp doanh thu theo mặt hàng' },
-    { id: 'debt-summary', name: 'Tổng hợp công nợ phải thu khách hàng' }
-]);
-
-const ledgerReports = ref([
-    { id: 'general-ledger', name: 'Sổ nhật ký chung' },
-    { id: 'cash-book', name: 'Sổ quỹ tiền mặt' }
 ]);
 
 // Hàm Helper để tái sử dụng logic filter
@@ -77,15 +59,11 @@ const filterReports = (reportsArray) => {
 // Computed Properties để tự động lọc khi người dùng gõ tìm kiếm
 const filteredFinancial = computed(() => filterReports(financialReports.value));
 const filteredInventory = computed(() => filterReports(inventoryReports.value));
-const filteredSales = computed(() => filterReports(salesReports.value));
-const filteredLedger = computed(() => filterReports(ledgerReports.value));
 
-// Tính toán xem có phải tất cả các mảng đều rỗng hay không (để hiện màn hình trống)
+// CẬP NHẬT: Tính toán lại, chỉ kiểm tra 2 mảng còn lại
 const isAllEmpty = computed(() => {
     return filteredFinancial.value.length === 0 &&
-        filteredInventory.value.length === 0 &&
-        filteredSales.value.length === 0 &&
-        filteredLedger.value.length === 0;
+           filteredInventory.value.length === 0;
 });
 
 // Điều hướng tập trung
@@ -99,14 +77,6 @@ const handleOpenReport = (report) => {
     // 2. Nhóm Báo cáo Kho - Vật tư
     else if (['stock-report', 'inventory-detail', 'slow-moving'].includes(report.id)) {
         targetRouteName = 'InventoryReport';
-    }
-    // 3. Nhóm Báo cáo Bán hàng & Công nợ
-    else if (['revenue-by-item', 'debt-summary'].includes(report.id)) {
-        targetRouteName = 'SalesReport';
-    }
-    // 4. Nhóm Sổ cái & Tiền mặt
-    else if (['general-ledger', 'cash-book'].includes(report.id)) {
-        targetRouteName = 'LedgerReport';
     }
     
     // Nếu chưa được cấu hình thì báo lỗi ra console để debug

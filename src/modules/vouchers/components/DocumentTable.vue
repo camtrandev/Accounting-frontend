@@ -17,96 +17,115 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="doc in filteredDocuments" :key="doc.Id" :class="{ 'row-draft': doc.Status === 0 }">
+        <tr v-for="doc in documents" :key="doc.id" :class="{ 'row-draft': doc.status === 0 }">
           <td class="text-center">
-            <input type="checkbox" v-model="selectedIds" :value="doc.Id" />
+            <input type="checkbox" v-model="selectedIds" :value="doc.id" />
           </td>
-          <td class="font-bold">{{ doc.DocumentNo }}</td>
+          <td class="font-bold">{{ doc.documentNo }}</td>
           <td>
-            <span :class="['type-badge', doc.DocType.toLowerCase()]">
-              {{ translateType(doc.DocType) }}
+            <span :class="['type-badge', doc.docType?.toLowerCase()]">
+              {{ translateType(doc.docType) }}
             </span>
           </td>
-          <td>{{ formatDate(doc.DocumentDate) }}</td>
-          <td class="partner-name">{{ doc.PartnerName }}</td>
+          <td>{{ formatDate(doc.documentDate) }}</td>
+          <td class="partner-name">{{ doc.partnerName || '-' }}</td>
           <td class="text-right font-bold amount">
-            {{ formatCurrency(doc.TotalAmount) }}
+            {{ doc.totalAmount ? formatCurrency(doc.totalAmount) : '-' }}
           </td>
-          <td class="description" :title="doc.Description">
-            {{ doc.Description }}
+          <td class="description" :title="doc.description">
+            {{ doc.description }}
           </td>
           <td class="text-center">
-            <span :class="['status-badge', doc.Status === 1 ? 'posted' : 'draft']">
-              {{ doc.Status === 1 ? 'Đã ghi sổ' : 'Bản nháp' }}
+            <span :class="['status-badge', doc.status === 1 ? 'posted' : (doc.status === 2 ? 'pending' : 'draft')]">
+              {{ doc.status === 1 ? 'Đã ghi sổ' : (doc.status === 2 ? 'Chờ duyệt' : 'Bản nháp') }}
             </span>
           </td>
           <td class="text-center actions">
             <button class="btn-action" @click="$emit('edit', doc)" title="Sửa">✏️</button>
-            <button class="btn-action btn-delete" @click="$emit('delete', doc.Id)" title="Xóa">🗑️</button>
+            <button class="btn-action btn-delete" @click="$emit('delete', doc.id)" title="Xóa">🗑️</button>
           </td>
         </tr>
       </tbody>
     </table>
 
-    <!-- Empty State -->
-    <div v-if="filteredDocuments.length === 0" class="empty-state">
+    <div v-if="documents.length === 0" class="empty-state">
       Không tìm thấy chứng từ nào phù hợp.
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 
 const props = defineProps({
-  filters: Object
+  documents: {
+    type: Array,
+    default: () => []
+  }
 });
 
 defineEmits(['edit', 'delete']);
 
 const selectedIds = ref([]);
 
-// Dữ liệu Mockup mở rộng (Thêm PartnerName để hiển thị)
-const documents = ref([
-  { Id: 1, DocumentNo: 'HD00102', DocType: 'PURCHASE', DocumentDate: '2026-04-20', PartnerName: 'Cửa hàng Phong Vũ', TotalAmount: 25500000, Description: 'Hóa đơn mua thiết bị văn phòng (PC, Bàn ghế)', Status: 1 },
-  { Id: 2, DocumentNo: 'PT0045', DocType: 'RECEIPT', DocumentDate: '2026-04-21', PartnerName: 'Công ty TNHH XYZ', TotalAmount: 15000000, Description: 'Thu tiền bán hàng công ty XYZ', Status: 1 },
-  { Id: 3, DocumentNo: 'PC0089', DocType: 'PAYMENT', DocumentDate: '2026-04-21', PartnerName: 'Điện lực Hà Nội', TotalAmount: 5500000, Description: 'Chi tiền điện nước tháng 4', Status: 0 },
-  { Id: 4, DocumentNo: 'HD00105', DocType: 'SALE', DocumentDate: '2026-04-22', PartnerName: 'Bệnh viện Việt Pháp', TotalAmount: 42000000, Description: 'Bán phần mềm quản lý cho đối tác', Status: 0 },
-]);
-
-// Logic lọc dữ liệu tại chỗ (Client-side filtering)
-const filteredDocuments = computed(() => {
-  return documents.value.filter(doc => {
-    const matchSearch = doc.DocumentNo.toLowerCase().includes(props.filters.search.toLowerCase()) ||
-      doc.PartnerName.toLowerCase().includes(props.filters.search.toLowerCase());
-    const matchType = props.filters.type ? doc.DocType === props.filters.type : true;
-    const matchStatus = props.filters.status !== '' ? doc.Status === parseInt(props.filters.status) : true;
-    return matchSearch && matchType && matchStatus;
-  });
-});
-
 const translateType = (type) => {
-  const map = { 'PURCHASE': 'Mua hàng', 'SALE': 'Bán hàng', 'RECEIPT': 'Phiếu thu', 'PAYMENT': 'Phiếu chi' };
-  return map[type] || type;
+  if (!type) return '';
+  const map = {
+    'PURCHASE': 'Mua hàng',
+    'SALE': 'Bán hàng',
+    'RECEIPT': 'Phiếu thu',
+    'PAYMENT': 'Phiếu chi',
+    'TRANSFER': 'Chuyển kho',
+    'INVENTORY_RECEIPT': 'Nhập kho',
+    'INVENTORY_ISSUE': 'Xuất kho'
+  };
+  return map[type.toUpperCase()] || type;
 };
 
 const formatCurrency = (value) => {
+  if (!value) return '';
   return new Intl.NumberFormat('vi-VN').format(value);
 };
 
 const formatDate = (dateString) => {
+  if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleDateString('vi-VN');
 };
 
+// Đổi từ filteredDocuments thành props.documents
 const toggleSelectAll = (e) => {
   if (e.target.checked) {
-    selectedIds.value = filteredDocuments.value.map(d => d.Id);
+    selectedIds.value = props.documents.map(d => d.id);
   } else {
     selectedIds.value = [];
   }
 };
 </script>
+
+<style scoped>
+/* KIỂM SOÁT SCROLL KHI NHIỀU BẢN GHI (20 DÒNG TRỞ LÊN) */
+.table-container {
+  max-height: 520px;
+  /* Chiều cao vừa đẹp cho khoảng 10 dòng dữ liệu */
+  overflow-y: auto;
+  /* Hiện thanh cuộn dọc nếu vượt quá max-height */
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+/* Cố định tiêu đề bảng khi cuộn chuột xuống */
+.document-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f8fafc;
+  /* Màu nền cho Header để không bị đè chữ */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  /* Bóng đổ mờ giúp tách biệt Header và Content */
+}
+</style>
 
 <style scoped>
 .table-container {

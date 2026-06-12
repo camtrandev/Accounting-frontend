@@ -66,9 +66,9 @@ export const useVouchersStore = defineStore('vouchers', {
         async createVoucher(payload) {
             try {
                 console.log('%c 📤 PAYLOAD GỬI ĐI LƯU:', 'color: #E91E63; font-weight: bold', payload);
-                
+
                 const result = await vouchersApi.saveVoucher(payload);
-                
+
                 console.log('%c ✅ KẾT QUẢ SAU KHI LƯU:', 'color: #4CAF50; font-weight: bold', result);
                 return result;
             } catch (error) {
@@ -83,6 +83,15 @@ export const useVouchersStore = defineStore('vouchers', {
                 this.pendingVouchers = data;
             } catch (error) {
                 console.error("Lỗi lấy danh sách chờ duyệt", error);
+            }
+        },
+
+        async fetchAllVouchers() {
+            try {
+                const data = await vouchersApi.getAllDocuments();
+                this.vouchers = data; // Gán dữ liệu API trả về vào state
+            } catch (error) {
+                console.error("Lỗi lấy tất cả chứng từ:", error);
             }
         },
 

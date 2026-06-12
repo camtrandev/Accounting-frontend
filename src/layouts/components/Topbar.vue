@@ -48,7 +48,7 @@ const handleLogout = () => {
 <template>
   <div class="header">
     <div class="logo">
-      Accounting System
+      
     </div>
 
     <div class="search-box">
@@ -114,7 +114,17 @@ const handleLogout = () => {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  background: rgba(255, 255, 255, 0.9);
+
+
+   background: linear-gradient(
+    90deg,
+    #e2ddf8 0%,
+    #f2f2fc 40%,
+    #ffffff 100%
+  );
+  border-bottom: 1px solid #e9e5ff;
+
+
   backdrop-filter: blur(10px);
   border-bottom: 1px solid #e5e7eb;
   margin-left: calc(var(--sidebar-width) + 40px);
@@ -123,9 +133,16 @@ const handleLogout = () => {
 }
 
 .logo {
-  font-size: 18px;
-  font-weight: 600;
-  margin-right: 24px;
+  width: 55px;
+  height: 55px;
+
+  background-image: url("../../assets/Image/image-Photoroom.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+
+  margin-right: 4px;
+  flex-shrink: 0;
 }
 
 .search-box {

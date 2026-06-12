@@ -46,7 +46,7 @@ const isVoucherOpen = ref(isVoucherRoute.value);
 
             <router-link to="/" class="menu-item" exact-active-class="active" @click="isVoucherOpen = false">
                 <span>📊</span>
-                <span v-if="!isCollapse">Dashboard</span>
+                <span v-if="!isCollapse">Trang Chủ</span>
                 <span v-if="!isCollapse" class="arrow"></span>
             </router-link>
 
@@ -109,17 +109,11 @@ const isVoucherOpen = ref(isVoucherRoute.value);
         </div>
 
         <div class="bottom">
-            <div class="dark-mode">
-                <span v-if="!isCollapse">Dark Mode</span>
-                <label class="switch">
-                    <input type="checkbox">
-                    <span class="slider"></span>
-                </label>
-            </div>
+            
 
             <div class="logout" @click="handleLogout">
                 🚪
-                <span v-if="!isCollapse">Log Out</span>
+                <span v-if="!isCollapse">Đăng Xuất</span>
             </div>
 
             <div class="collapse-btn" @click="handleToggles">

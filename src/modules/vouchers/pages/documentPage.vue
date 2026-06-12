@@ -24,28 +24,41 @@
       </div>
     </div>
 
-    <DocumentTable :filters="filters" @edit="handleEdit" @delete="handleDelete" />
+    <DocumentTable 
+      :documents="paginatedDocuments" 
+      @edit="handleEdit" 
+      @delete="handleDelete" 
+    />
+
+    <Pagination 
+      :total-items="filteredDocuments.length" 
+      v-model:current-page="currentPage"
+      v-model:page-size="pageSize" 
+    />
 
     <ApprovalListModal v-if="showApprovalModal" :pending-list="vStore.pendingVouchers"
       @close="showApprovalModal = false" @refresh="vStore.fetchPendingVouchers()" />
   </div>
 </template>
+
 <script setup>
-import { onMounted, computed, ref, reactive } from 'vue';
+import { onMounted, computed, ref, reactive, watch } from 'vue';
 import { useAuthStore } from '../../../stores/auth.store';
 import { useVouchersStore } from '../store/vouchers.store';
 import { useToast } from "vue-toastification";
 import DocumentToolbar from '../components/DocumentToolbar.vue';
 import DocumentTable from '../components/DocumentTable.vue';
 import ApprovalListModal from '../components/ApprovalListModal.vue';
-import { shallowRef, defineAsyncComponent } from 'vue';
+import Pagination from '../components/Pagination.vue';
 
+// STATE PHÂN TRANG
+const currentPage = ref(1);
+const pageSize = ref(10); // Mặc định 10 chứng từ / trang
 
 const authStore = useAuthStore();
 const vStore = useVouchersStore();
 const toast = useToast();
 
-// --- STATE ---
 const showApprovalModal = ref(false);
 const filters = reactive({
   search: '',
@@ -55,47 +68,51 @@ const filters = reactive({
   toDate: ''
 });
 
-// --- COMPUTED ---
 const isAdmin = computed(() => authStore.userRole === 'Admin');
-// Dùng ?.length và || 0 để an toàn tuyệt đối, tránh trắng trang
 const pendingCount = computed(() => vStore.pendingVouchers?.length || 0);
 
-// --- LIFESTYLE ---
-onMounted(async () => {
-  try {
-    // Nếu là Admin thì mới đi lấy danh sách chờ duyệt
-    if (isAdmin.value) {
-      await vStore.fetchPendingVouchers();
-    }
-  } catch (error) {
-    console.error("Không thể tải danh sách chờ duyệt:", error);
-  }
+// BƯỚC 1: LỌC DỮ LIỆU DỰA TRÊN TÌM KIẾM/LOẠI/TRẠNG THÁI
+const filteredDocuments = computed(() => {
+  const rawData = vStore.vouchers || [];
+  return rawData.filter(doc => {
+    const searchStr = filters.search.toLowerCase();
+    const docNo = doc.documentNo?.toLowerCase() || '';
+    const partnerName = doc.partnerName?.toLowerCase() || '';
+
+    const matchSearch = docNo.includes(searchStr) || partnerName.includes(searchStr);
+    const matchType = filters.type ? doc.docType?.toUpperCase() === filters.type.toUpperCase() : true;
+    const matchStatus = filters.status !== '' ? doc.status === parseInt(filters.status) : true;
+
+    return matchSearch && matchType && matchStatus;
+  });
 });
 
-// --- HANDLERS ---
-const openApprovalList = () => {
-  showApprovalModal.value = true;
-};
+// Khi đổi bộ lọc, phải reset trang về 1 để không bị lỗi trang trắng
+watch(filters, () => {
+  currentPage.value = 1;
+}, { deep: true });
 
+// BƯỚC 2: CẮT MẢNG ĐÃ LỌC THÀNH TRANG ĐỂ TRUYỀN XUỐNG COMPONENT CON
+const paginatedDocuments = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return filteredDocuments.value.slice(start, end);
+});
 
-const handleCreateNew = () => {
-  console.log("Mở form thêm mới");
-  // Thêm logic điều hướng hoặc mở modal thêm mới của bạn ở đây
-};
+onMounted(async () => {
+  if (isAdmin.value) await vStore.fetchPendingVouchers();
+  await vStore.fetchAllVouchers(); 
+});
 
-const handleEdit = (doc) => {
-  console.log("Sửa chứng từ:", doc);
-};
-
+const openApprovalList = () => { showApprovalModal.value = true; };
+const handleCreateNew = () => { console.log("Mở form thêm mới"); };
+const handleEdit = (doc) => { console.log("Sửa chứng từ:", doc); };
 const handleDelete = (id) => {
   if (confirm("Bạn có chắc chắn muốn xóa chứng từ này?")) {
     console.log("Đã xóa ID:", id);
   }
 };
-
-const handleExportExcel = () => {
-  toast.success("Hệ thống đang chuẩn bị tệp Excel...");
-};
+const handleExportExcel = () => { toast.success("Hệ thống đang chuẩn bị tệp Excel..."); };
 </script>
 
 <style scoped>

@@ -17,9 +17,6 @@
         <span class="icon">📊</span> Xuất Excel
       </button>
 
-      <button class="btn-primary" @click="$emit('create')">
-        <span class="icon">+</span> Thêm mới
-      </button>
     </div>
   </div>
 </template>
