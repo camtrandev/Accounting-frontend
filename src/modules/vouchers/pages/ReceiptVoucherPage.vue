@@ -182,6 +182,25 @@ function readVietnameseMoney(number) {
     return res + " đồng chẵn.";
 }
 
+const resetForm = () => {
+    voucher.value = {
+        DocumentNo: '', 
+        PartnerId: null,
+        WarehouseId: listWarehouses.value.length > 0 ? listWarehouses.value[0].id : null,
+        BuyerName: '',
+        DocumentDate: new Date().toISOString().substr(0, 10),
+        Reason: '',
+        ReferenceDocs: '',
+        Details: [
+            // Trả về một dòng trống chuẩn của Phiếu thu
+            { Description: '', DebitAcc: '1111', CreditAcc: '131', Amount: 0 }
+        ]
+    };
+    
+    // Tự động sinh ngay số Phiếu thu mới
+    generateDocumentNo();
+};
+
 // --- 4. LOGIC LƯU DỮ LIỆU ---
 const handleSave = async () => {
     // Validate cơ bản
@@ -211,6 +230,7 @@ const handleSave = async () => {
         const result = await vStore.createVoucher(payload);
         if (result && result.success) {
             alert("✅ Lưu phiếu thu thành công!");
+            resetForm();
         } else {
             alert("❌ Lỗi: " + (result.message || "Không thể lưu"));
         }
@@ -245,15 +265,14 @@ const handleAutoFillFromAI = (scannedData) => {
         voucher.value.BuyerName = scannedData.targetName; // "Nguyễn Văn An"
     }
 
-    // --- PHẦN TABLE (CHI TIẾT) ---
+    /// --- PHẦN TABLE (CHI TIẾT) ---
     if (scannedData.details && scannedData.details.length > 0) {
         voucher.value.Details = scannedData.details.map(item => ({
-            description: item.description || scannedData.reason,
-            // Trong ảnh debitAccount/creditAccount đang là null, 
-            // nên gán mặc định nếu AI không nhận diện được
-            debitAccount: item.debitAccount || '1111',
-            creditAccount: item.creditAccount || '131',
-            amount: Number(item.amount) || 0
+            // SỬA LẠI: Viết hoa chữ cái đầu cho khớp hoàn toàn với state khởi tạo ban đầu
+            Description: item.description || scannedData.reason,
+            DebitAcc: item.debitAccount || '1111',
+            CreditAcc: item.creditAccount || '131',
+            Amount: Number(item.amount) || 0
         }));
     }
 };

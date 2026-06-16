@@ -13,11 +13,11 @@
           <th class="text-right">Tổng Tiền</th>
           <th>Diễn Giải</th>
           <th class="text-center">Trạng Thái</th>
-          <th class="text-center">Thao tác</th>
+          <th class="text-center" v-if="isAdmin">Thao tác</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="doc in documents" :key="doc.id" :class="{ 'row-draft': doc.status === 0 }">
+        <tr v-for="doc in documents" :key="doc.id">
           <td class="text-center">
             <input type="checkbox" v-model="selectedIds" :value="doc.id" />
           </td>
@@ -28,21 +28,28 @@
             </span>
           </td>
           <td>{{ formatDate(doc.documentDate) }}</td>
-          <td class="partner-name">{{ doc.partnerName || '-' }}</td>
+
+          <td class="partner-name">{{ getPartnerName(doc.partnerId) || doc.partnerName || '-' }}</td>
+
           <td class="text-right font-bold amount">
             {{ doc.totalAmount ? formatCurrency(doc.totalAmount) : '-' }}
           </td>
           <td class="description" :title="doc.description">
             {{ doc.description }}
           </td>
+
           <td class="text-center">
-            <span :class="['status-badge', doc.status === 1 ? 'posted' : (doc.status === 2 ? 'pending' : 'draft')]">
-              {{ doc.status === 1 ? 'Đã ghi sổ' : (doc.status === 2 ? 'Chờ duyệt' : 'Bản nháp') }}
+            <span :class="['status-badge', doc.status === 1 ? 'posted' : (doc.status === 2 ? 'pending' : 'cancelled')]">
+              {{ doc.status === 1 ? 'Đã ghi sổ' : (doc.status === 2 ? 'Chờ duyệt' : 'Huỷ') }}
             </span>
           </td>
-          <td class="text-center actions">
-            <button class="btn-action" @click="$emit('edit', doc)" title="Sửa">✏️</button>
-            <button class="btn-action btn-delete" @click="$emit('delete', doc.id)" title="Xóa">🗑️</button>
+
+          <td class="text-center actions" v-if="isAdmin">
+            <template v-if="doc.status === 2">
+              <button class="btn-action btn-approve" @click="openModal('approve', doc.id)" title="Duyệt">✔️
+                Duyệt</button>
+              <button class="btn-action btn-reject" @click="openModal('reject', doc.id)" title="Huỷ">❌ Huỷ</button>
+            </template>
           </td>
         </tr>
       </tbody>
@@ -51,11 +58,19 @@
     <div v-if="documents.length === 0" class="empty-state">
       Không tìm thấy chứng từ nào phù hợp.
     </div>
+
+    <ConfirmModal :isOpen="modalConfig.isOpen" :title="modalConfig.title" :message="modalConfig.message"
+      :confirmText="modalConfig.confirmText" :confirmColorClass="modalConfig.confirmColorClass" @close="closeModal"
+      @confirm="handleConfirmAction" />
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, reactive } from 'vue';
+import ConfirmModal from '../components/base/ConfirmModal.vue'
+
+// IMPORT STORE
+import { useVouchersStore } from '../store/vouchers.store';
 
 const props = defineProps({
   documents: {
@@ -64,9 +79,95 @@ const props = defineProps({
   }
 });
 
-defineEmits(['edit', 'delete']);
+const emit = defineEmits(['approve', 'reject']);
+
+// Khởi tạo Store
+const vStore = useVouchersStore();
 
 const selectedIds = ref([]);
+const isAdmin = ref(false);
+
+// STATE VÀ HÀM XỬ LÝ MODAL
+const selectedDocId = ref(null);
+const actionType = ref('');
+
+const modalConfig = reactive({
+  isOpen: false,
+  title: '',
+  message: '',
+  confirmText: '',
+  confirmColorClass: ''
+});
+
+// Hàm mở Modal
+const openModal = (type, id) => {
+  selectedDocId.value = id;
+  actionType.value = type;
+
+  if (type === 'approve') {
+    modalConfig.title = 'Xác nhận duyệt?';
+    modalConfig.message = 'Bạn có chắc chắn muốn ghi sổ chứng từ này không?';
+    modalConfig.confirmText = 'Ghi sổ';
+    modalConfig.confirmColorClass = 'btn-success';
+  } else if (type === 'reject') {
+    modalConfig.title = 'Xác nhận huỷ?';
+    modalConfig.message = 'Bạn có chắc chắn muốn huỷ chứng từ này không?';
+    modalConfig.confirmText = 'Huỷ chứng từ';
+    modalConfig.confirmColorClass = 'btn-danger';
+  }
+
+  modalConfig.isOpen = true;
+};
+
+// Hàm đóng Modal
+const closeModal = () => {
+  modalConfig.isOpen = false;
+  selectedDocId.value = null;
+  actionType.value = '';
+};
+
+// Hàm xử lý Xác nhận
+const handleConfirmAction = () => {
+  if (actionType.value === 'approve') {
+    emit('approve', selectedDocId.value);
+  } else if (actionType.value === 'reject') {
+    emit('reject', selectedDocId.value);
+  }
+  closeModal();
+};
+
+onMounted(async () => {
+  // 1. ĐỌC QUYỀN ADMIN TỪ LOCALSTORAGE
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const userObj = JSON.parse(userStr);
+      if (userObj.role === 'Admin') {
+        isAdmin.value = true;
+      }
+    }
+  } catch (error) {
+    console.error("Lỗi khi đọc dữ liệu phân quyền từ LocalStorage:", error);
+  }
+
+  // 2. LẤY DỮ LIỆU DANH MỤC (Nếu chưa có)
+  if (!vStore.partners || vStore.partners.length === 0) {
+      await vStore.fetchMetaData();
+  }
+});
+
+// HÀM TÌM TÊN ĐỐI TÁC DỰA TRÊN ID
+const getPartnerName = (partnerId) => {
+  if (!partnerId) return '';
+
+  // Ép kiểu về Number để đảm bảo so sánh đúng
+  const targetId = Number(partnerId);
+
+  // Tìm trong store
+  const partner = vStore.partners.find(p => Number(p.id) === targetId || Number(p.Id) === targetId);
+
+  return partner ? (partner.partnerName || partner.PartnerName) : '';
+};
 
 const translateType = (type) => {
   if (!type) return '';
@@ -93,7 +194,6 @@ const formatDate = (dateString) => {
   return date.toLocaleDateString('vi-VN');
 };
 
-// Đổi từ filteredDocuments thành props.documents
 const toggleSelectAll = (e) => {
   if (e.target.checked) {
     selectedIds.value = props.documents.map(d => d.id);
@@ -102,6 +202,36 @@ const toggleSelectAll = (e) => {
   }
 };
 </script>
+
+<style scoped>
+/* Thêm một chút CSS cho 2 nút mới để nhìn rõ ràng hơn, bạn có thể chỉnh lại theo theme dự án */
+.btn-approve {
+  color: #16a34a;
+  /* Xanh lá */
+  font-weight: 500;
+  margin-right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-approve:hover {
+  text-decoration: underline;
+}
+
+.btn-reject {
+  color: #dc2626;
+  /* Đỏ */
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-reject:hover {
+  text-decoration: underline;
+}
+</style>
 
 <style scoped>
 /* KIỂM SOÁT SCROLL KHI NHIỀU BẢN GHI (20 DÒNG TRỞ LÊN) */
@@ -226,11 +356,19 @@ const toggleSelectAll = (e) => {
 
 .status-badge.posted {
   background: #10b981;
+  /* Màu Xanh - Đã ghi sổ */
   color: #fff;
 }
 
-.status-badge.draft {
+.status-badge.pending {
   background: #f59e0b;
+  /* Màu Vàng - Chờ duyệt */
+  color: #fff;
+}
+
+.status-badge.cancelled {
+  background: #ef4444;
+  /* Màu Đỏ - Huỷ */
   color: #fff;
 }
 

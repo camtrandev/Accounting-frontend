@@ -109,6 +109,16 @@ export const useVouchersStore = defineStore('vouchers', {
                 this.pendingVouchers = this.pendingVouchers.filter(v => v.id !== id);
             }
             return result;
+        },
+        // Hành động lưu sổ cái
+        async postLedgerEntries(entriesPayload) {
+            try {
+                const result = await vouchersApi.postLedgerEntries(entriesPayload);
+                return result;
+            } catch (error) {
+                console.error("Lỗi khi lưu sổ cái:", error);
+                throw error;
+            }
         }
     }
 });

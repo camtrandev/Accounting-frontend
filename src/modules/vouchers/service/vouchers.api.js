@@ -57,8 +57,12 @@ export const vouchersApi = {
 
     // Ghi sổ chứng từ (Post) - Chuyển từ bản nháp sang chính thức
     postVoucher: async (id) => {
-        // Trong hình của bạn là POST /api/documents/{id}/post
-        const res = await axios.post(`${API_BASE_URL}/api/documents/${id}/post`);
+        const token = localStorage.getItem('token'); // Lấy token từ Local Storage
+        const res = await axios.post(`${API_BASE_URL}/api/documents/${id}/post`, {}, {
+            headers: {
+                'Authorization': `Bearer ${token}` // Gửi kèm Token xuống Backend
+            }
+        });
         return res.data;
     },
 
@@ -97,5 +101,18 @@ export const vouchersApi = {
     rejectVoucher: async (id) => {
         const res = await axios.post(`${API_BASE_URL}/api/documents/${id}/reject`);
         return res.data;
-    }
+    },
+
+    // Lưu dữ liệu định khoản vào Sổ cái
+    postLedgerEntries: async (entriesPayload) => {
+        const rawToken = localStorage.getItem('token') || '';
+        const token = rawToken.replace(/['"]+/g, '');
+
+        const res = await axios.post(`${API_BASE_URL}/api/ledger/post-entries`, entriesPayload, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        return res.data;
+    },
 };

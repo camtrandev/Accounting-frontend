@@ -37,10 +37,9 @@
             <!-- Ô 4: Số chứng từ -->
             <div class="field-group flex-1">
                 <label class="label-premium">Số chứng từ</label>
-                <div class="input-wrapper readonly">
+                <div class="input-wrapper"> 
                     <i class="fas fa-hashtag icon-inside"></i>
-                    <input type="text" v-model="model.DocumentNo" placeholder="HDBH-0001" class="input-premium"
-                        readonly />
+                    <input type="text" v-model="model.DocumentNo" placeholder="HDBH-0001" class="input-premium" />
                 </div>
             </div>
 

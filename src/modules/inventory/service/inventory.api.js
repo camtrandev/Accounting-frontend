@@ -24,6 +24,18 @@ const inventoryApi = {
         return axios.get(`${API_BASE_URL}/documents/${id}/print`);
     },
 
+    updateDocument(id, data) {
+        return axios.put(`${API_BASE_URL}/documents/${id}`, data);
+    },
+    getDocumentById(id) {
+        return axios.get(`${API_BASE_URL}/documents/${id}`);
+    },
+
+   
+    deleteDocument(id) {
+        return axios.delete(`${API_BASE_URL}/documents/${id}`);
+    },
+
     // ====================================================
     // 2. NGHIỆP VỤ DANH MỤC NỀN & TỒN KHO
     // ====================================================

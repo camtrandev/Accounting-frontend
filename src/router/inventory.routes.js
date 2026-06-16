@@ -15,6 +15,11 @@ export default [
     component: () => import('@/modules/inventory/pages/IssueFormPage.vue')
   },
   {
+    path: 'transfer/create',
+    name: 'InventoryTransferCreate',
+    component: () => import('@/modules/inventory/pages/InventoryTransferPage.vue')
+  },
+  {
     path: 'inventory/check',
     name: 'InventoryCheck',
     component: () => import('@/modules/inventory/pages/InventoryCheckPage.vue')

@@ -5,7 +5,7 @@
                 <button class="btn-back" @click="goBack">
                     <i class="fas fa-arrow-left"></i> Quay lại
                 </button>
-                <h2 class="page-title">Thêm mới Phiếu Xuất Kho</h2>
+                <h2 class="page-title">{{ isEditMode ? 'Cập nhật Phiếu Xuất Kho' : 'Thêm mới Phiếu Xuất Kho' }}</h2>
             </div>
             <div class="header-right">
                 <button class="btn-outline" @click="resetForm">Hủy bỏ</button>
@@ -187,17 +187,22 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router' // 👉 Thêm useRoute
 import { useInventoryStore } from '../store/inventory.store'
 import inventoryApi from '../service/inventory.api'
 import ExcelImportModal from '../components/ExcelImportModal.vue'
 import { useToast } from 'vue-toastification'
 
 const router = useRouter()
+const route = useRoute() // 👉 Khai báo route
 const inventoryStore = useInventoryStore()
 const toast = useToast()
 
 const isExcelModalOpen = ref(false)
+
+// 👉 BIẾN NHẬN DIỆN CHẾ ĐỘ SỬA
+const isEditMode = computed(() => !!route.query.id);
+const editVoucherId = computed(() => route.query.id);
 
 // BIẾN LƯU DỮ LIỆU DANH MỤC
 const warehouses = computed(() => inventoryStore.warehouses)
@@ -254,12 +259,58 @@ const detailRows = ref([
     { id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', inStock: null, quantity: 0, price: 0, amount: 0, error: false }
 ])
 
-// --- FETCH DATA TỪ API KHI LOAD TRANG ---
+// --- FETCH DATA TỪ API KHI LOAD TRANG (👉 ĐÃ SỬA CẤU TRÚC LẤY DỮ LIỆU API) ---
 onMounted(async () => {
     try {
         await inventoryStore.fetchMetadata();
+
+        // NẾU LÀ CHẾ ĐỘ SỬA: Lấy dữ liệu chứng từ cũ từ API
+        if (isEditMode.value) {
+            toast.info("Đang tải dữ liệu chứng từ...");
+            const res = await inventoryStore.getDocumentById(editVoucherId.value);
+            const actualData = res.data;
+
+            if (actualData && actualData.document) {
+                // Đổ dữ liệu vào Master
+                masterData.voucherNumber = actualData.document.documentNo;
+                masterData.partnerId = actualData.document.partnerId || 0;
+                masterData.warehouseId = actualData.document.warehouseId || 0;
+                masterData.description = actualData.document.description || '';
+                
+                const docDate = actualData.document.documentDate ? actualData.document.documentDate.split('T')[0] : today;
+                const postDate = actualData.document.postingDate ? actualData.document.postingDate.split('T')[0] : today;
+                masterData.voucherDate = docDate;
+                masterData.postingDate = postDate;
+
+                // Đổ dữ liệu vào Lines
+                if (actualData.lines && actualData.lines.length > 0) {
+                    detailRows.value = actualData.lines.map(line => ({
+                        id: Date.now() + Math.random(),
+                        itemId: line.itemId || 0,
+                        itemCode: line.itemCode || '',
+                        itemName: line.itemName || line.description || '',
+                        unit: line.unit || 'Cái',
+                        inStock: null, // Đặt null tạm, sẽ fetch ngay sau vòng lặp này
+                        quantity: line.quantity || 0,
+                        price: line.unitPrice || 0,
+                        amount: (line.quantity || 0) * (line.unitPrice || 0),
+                        error: false
+                    }));
+
+                    // Lặp kiểm tra lại tồn kho thực tế cho tất cả các dòng vừa load ra
+                    for (let i = 0; i < detailRows.value.length; i++) {
+                        if (detailRows.value[i].itemId !== 0) {
+                            await fetchRealTimeStock(i);
+                        }
+                    }
+                }
+            } else {
+                toast.error("Không tìm thấy dữ liệu chi tiết của chứng từ!");
+            }
+        }
     } catch (error) {
-        toast.error("Không thể tải dữ liệu danh mục nền. Vui lòng tải lại trang!");
+        toast.error("Không thể tải dữ liệu. Vui lòng tải lại trang!");
+        console.error("Lỗi khi tải dữ liệu form:", error);
     }
 })
 
@@ -389,7 +440,7 @@ const resetForm = () => {
     detailRows.value = [{ id: Date.now(), itemId: 0, itemCode: '', itemName: '', unit: 'Cái', inStock: null, quantity: 0, price: 0, amount: 0, error: false }];
 }
 
-// 7. HÀM LƯU CHỨNG TỪ (GỌI API)
+// 7. HÀM LƯU CHỨNG TỪ (👉 ĐÃ SỬA PHÂN LUỒNG TẠO MỚI / CẬP NHẬT)
 const saveVoucher = async () => {
     try {
         // Validate Master
@@ -418,11 +469,11 @@ const saveVoucher = async () => {
 
         const safeDateFormat = (dateStr) => `${dateStr}T00:00:00.000Z`;
 
-        // Đóng gói Payload (Lưu ý: docType là SALE)
+        // Đóng gói Payload
         const payload = {
             document: {
                 documentNo: masterData.voucherNumber,
-                docType: "SALE", // <--- Bắt buộc là SALE để backend C# kích hoạt luồng trừ kho
+                docType: "INVENTORY_ISSUE", // Bắt buộc là INVENTORY_ISSUE để nhận dạng xuất kho
                 documentDate: safeDateFormat(masterData.voucherDate),
                 postingDate: safeDateFormat(masterData.postingDate),
                 partnerId: Number(masterData.partnerId),
@@ -440,11 +491,23 @@ const saveVoucher = async () => {
             }))
         }
 
-        const response = await inventoryStore.createNewDocument(payload);
+        // 👉 Phân luồng Gọi API Cập nhật / Thêm mới
+        let response;
+        if (isEditMode.value) {
+            response = await inventoryStore.updateDocument(editVoucherId.value, payload);
+        } else {
+            response = await inventoryStore.createNewDocument(payload);
+        }
 
         if (response && response.success === true) {
-            toast.success(response.message || 'Lưu phiếu xuất kho thành công!');
-            resetForm();
+            toast.success(isEditMode.value ? 'Cập nhật chứng từ thành công!' : (response.message || 'Lưu phiếu xuất kho thành công!'));
+            
+            if (isEditMode.value) {
+                goBack(); // Đang sửa thì đá về list
+            } else {
+                resetForm(); // Thêm mới thì reset form nhập tiếp
+            }
+            
             await inventoryStore.fetchMetadata();
         } else {
             toast.error(response?.message || 'Có lỗi xảy ra, không thể lưu chứng từ!');

@@ -283,8 +283,30 @@ const generateFrontendVoucherNo = (prefix = 'HDMH') => {
     return `${prefix}${datePart}-${randomPart}`;
 };
 
+// Hàm reset toàn bộ form Hoá đơn mua hàng về trạng thái ban đầu
+const resetForm = () => {
+    voucher.value = {
+        DocumentNo: generateFrontendVoucherNo('HDMH'), // Sinh ngay số chứng từ mới
+        PartnerId: null,
+        WarehouseId: vStore.warehouses.length > 0 ? vStore.warehouses[0].id : null, // Gán lại kho mặc định
+        BuyerName: getLoggedInUserName(), // Lấy lại tên người dùng
+        DocumentDate: new Date().toISOString().substr(0, 10),
+        Address: '',
+        TaxCode: '',
+        Description: '',
+        TaxRate: 10,
+        TaxAmount: 0,
+        Details: [{ 
+            ItemName: '', Unit: '', Quantity: 0, UnitPrice: 0, DiscountRate: 0, Amount: 0, 
+            DebitAcc: '1561', CreditAcc: '331' // Trả về cặp tài khoản mặc định của phiếu Mua hàng
+        }]
+    };
+};
+
 // Hàm xử lý lưu hóa đơn chuẩn theo Schema API
 const handleSave = async () => {
+
+    console.log('Toàn bộ giá trị voucher:', voucher.value);
     // 1. Kiểm tra các điều kiện bắt buộc trước khi lưu
     if (!voucher.value.PartnerId) {
         alert("Vui lòng chọn nhà cung cấp!");
@@ -301,31 +323,35 @@ const handleSave = async () => {
 
     // 2. Đóng gói dữ liệu chuẩn theo DocumentCreateDto.cs và các thực thể Entities
     const payload = {
-        // Khớp với thuộc tính 'Document' trong DocumentCreateDto
-        document: {
-            documentNo: voucher.value.DocumentNo,
-            docType: "PURCHASE",
-            // Chuyển đổi ngày sang định dạng ISO chuẩn cho .NET DateTime
-            documentDate: new Date(voucher.value.DocumentDate).toISOString(),
-            postingDate: new Date(voucher.value.DocumentDate).toISOString(),
-            partnerId: Number(voucher.value.PartnerId),
-            warehouseId: Number(voucher.value.WarehouseId),
-            // Tính tổng tiền bao gồm thuế
-            totalAmount: subTotal.value + (Number(voucher.value.TaxAmount) || 0),
-            description: voucher.value.Description || "",
-            status: 0, // Mặc định là 0 (Draft - Nháp) khi mới tạo
-        },
-        // Khớp với thuộc tính 'Lines' trong DocumentCreateDto (được đổi thành camelCase)
-        lines: voucher.value.Details
-            .filter(item => item.ItemName) // Chỉ lấy các dòng có tên hàng
-            .map(item => ({
-                itemId: item.ItemId || null, // ID hàng hóa từ danh mục
-                quantity: Number(item.Quantity) || 0,
-                unitPrice: Number(item.UnitPrice) || 0,
-                taxRate: Number(voucher.value.TaxRate) || 0,
-                description: item.ItemName // Diễn giải chi tiết cho từng dòng
-            }))
-    };
+    // Khớp với thuộc tính 'Document' trong DocumentCreateDto
+    document: {
+        documentNo: voucher.value.DocumentNo,
+        docType: "PURCHASE",
+        // Chuyển đổi ngày sang định dạng ISO chuẩn cho .NET DateTime
+        documentDate: new Date(voucher.value.DocumentDate).toISOString(),
+        postingDate: new Date(voucher.value.DocumentDate).toISOString(),
+        partnerId: Number(voucher.value.PartnerId),
+        warehouseId: Number(voucher.value.WarehouseId),
+        // Tính tổng tiền bao gồm thuế
+        totalAmount: subTotal.value + (Number(voucher.value.TaxAmount) || 0),
+        description: voucher.value.Description || "",
+        status: 0, // Mặc định là 0 (Draft - Nháp) khi mới tạo
+        
+        // Bổ sung TK Nợ và TK Có với giá trị mặc định lên Document
+        debitAcc: voucher.value.DebitAcc || "1561",
+        creditAcc: voucher.value.CreditAcc || "331"
+    },
+    // Khớp với thuộc tính 'Lines' trong DocumentCreateDto (được đổi thành camelCase)
+    lines: voucher.value.Details
+        .filter(item => item.ItemName) // Chỉ lấy các dòng có tên hàng
+        .map(item => ({
+            itemId: item.ItemId || null, // ID hàng hóa từ danh mục
+            quantity: Number(item.Quantity) || 0,
+            unitPrice: Number(item.UnitPrice) || 0,
+            taxRate: Number(voucher.value.TaxRate) || 0,
+            description: item.ItemName // Diễn giải chi tiết cho từng dòng
+        }))
+};
 
     // 3. Thực thi gọi API qua Store
     try {
@@ -336,6 +362,8 @@ const handleSave = async () => {
         if (result && result.success === true) {
             alert("Lưu hóa đơn thành công! ID mới: " + result.data);
             console.log("Dữ liệu đã nằm trong DB với ID:", result.data);
+
+            resetForm();
         } else {
             // Nếu success = false, hiển thị lỗi thực tế từ Backend
             const errorMsg = result?.message || "Lỗi không xác định từ Server";

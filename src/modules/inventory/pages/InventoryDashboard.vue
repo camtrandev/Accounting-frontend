@@ -1,111 +1,177 @@
 <script setup>
-// Bổ sung thêm 'ref' vào import
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useInventoryStore } from '../store/inventory.store'
 import InventoryQuickActions from '../components/InventoryQuickActions.vue'
 import InventoryFilter from '../components/InventoryFilter.vue'
 import InventoryTable from '../components/InventoryTable.vue'
+import InventoryDeleteModal from '../components/base/InventoryDeleteModal.vue' // Import Modal xác nhận
+import { useToast } from "vue-toastification" // Import Toast thông báo
 
 const router = useRouter()
 const inventoryStore = useInventoryStore()
+const toast = useToast()
 
-// Lưu lại trạng thái filter hiện tại để dùng khi chuyển trang
 const currentFilters = ref({})
 
-// Lấy dữ liệu từ Store
-const tableData = computed(() => inventoryStore.documents)
+// ========================================================
+// LỌC DỮ LIỆU KHO (Bỏ qua Bán, Mua, Thu, Chi)
+// ========================================================
+const tableData = computed(() => {
+  const rawData = inventoryStore.documents || [];
+  const excludeTypes = ['SALE', 'PURCHASE', 'RECEIPT', 'PAYMENT'];
+
+  return rawData.filter(doc => {
+    const type = doc.type ? doc.type.toUpperCase() : '';
+    return !excludeTypes.includes(type);
+  });
+});
+
+// ========================================================
+// LOG DỮ LIỆU ĐÃ LỌC RA CONSOLE (F12)
+// ========================================================
+watch(tableData, (newFilteredData) => {
+  if (newFilteredData && newFilteredData.length > 0) {
+    console.group('🔍 [InventoryDashboard] DỮ LIỆU KHO SAU KHI LỌC');
+    console.log(`Số lượng bản ghi hợp lệ: ${newFilteredData.length}`);
+
+    const logData = newFilteredData.map(d => ({
+      'Số chứng từ': d.voucherNumber,
+      'Loại phiếu': d.type,
+      'Ngày CT': d.voucherDate ? d.voucherDate.split('T')[0] : '',
+      'Trạng thái': d.status === 1 ? 'Đã ghi sổ' : (d.status === 2 ? 'Chờ ghi sổ' : 'Đã huỷ'),
+      'Tổng tiền': d.totalAmount
+    }));
+    console.table(logData);
+    console.groupEnd();
+  }
+}, { deep: true });
+
 const isLoading = computed(() => inventoryStore.isLoading)
 const pagination = computed(() => inventoryStore.pagination)
 
 // 1. Hàm gọi API Lấy dữ liệu
 const fetchInventoryData = async (filters = {}) => {
   currentFilters.value = filters
-
   const params = {
     page: filters.page || 1,
     pageSize: filters.pageSize || 10,
-    search: filters.searchText || '',  
-    type: filters.voucherType || ''    
+    search: filters.searchText || '',
+    type: filters.voucherType || ''
   }
-  
   await inventoryStore.fetchDocuments(params)
 }
 
 // 2. Chuyển trang
 const handlePageChange = (newPage) => {
-  fetchInventoryData({ 
-    ...currentFilters.value, 
-    page: newPage 
+  fetchInventoryData({
+    ...currentFilters.value,
+    page: newPage
   })
 }
 
-// 3. Hàm Xử lý Xuất Excel (Xử lý tải file Blob chuẩn)
 // 3. Hàm Xử lý Xuất Excel
 const handleExportData = async (exportData) => {
   try {
-    console.log("Hệ thống đang xuất file Excel...");
-    
-    // SỬA LỖI Ở ĐÂY: Lấy đúng fromDate, toDate, warehouseId từ Modal gửi lên
+    toast.info("⏳ Đang xử lý xuất file Excel...");
+
     const params = {
-      fromDate: exportData.fromDate || '', // Nếu để trống sẽ gửi chuỗi rỗng
-      toDate: exportData.toDate || '',     // Nếu để trống sẽ gửi chuỗi rỗng
-      warehouseId: exportData.warehouseId || '' // Nếu không chọn kho sẽ gửi chuỗi rỗng
+      fromDate: exportData.fromDate || '',
+      toDate: exportData.toDate || '',
+      warehouseId: exportData.warehouseId || ''
     };
 
-    // Gọi API thông qua store
     const response = await inventoryStore.exportExcel(params);
-
-    // Xử lý tạo link tải file ảo từ dữ liệu Blob
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    
-    // Đặt tên file động theo thời gian hiện tại
+
     const dateStr = new Date().toISOString().slice(0, 10);
     link.setAttribute('download', `BaoCao_Kho_${dateStr}.xlsx`);
-    
+
     document.body.appendChild(link);
     link.click();
-    
-    // Dọn dẹp DOM
+
     link.parentNode.removeChild(link);
     window.URL.revokeObjectURL(url);
 
+    toast.success("Xuất Excel thành công!");
   } catch (error) {
     console.error("Lỗi xuất Excel:", error);
-    alert("Không thể tải file Excel. Vui lòng thử lại!");
+    toast.error("Không thể tải file Excel. Vui lòng thử lại!");
   }
 }
 
-// 4. Mở trang Sửa
+// 4. Mở trang Sửa (Nhận diện tự động Form nhập/xuất/chuyển theo docType)
 const handleEditVoucher = (voucher) => {
-  router.push({
-    path: `/inventory/${voucher.type}/edit/${voucher.id}`
-  })
-}
+  // Đảm bảo lấy đúng định dạng chữ hoa để so sánh
+  const docType = voucher.type ? voucher.type.toUpperCase() : '';
 
-// 5. Xử lý Xóa chứng từ
-const handleDeleteVoucher = async (voucher) => {
-  if (confirm(`Bạn có chắc chắn muốn xóa chứng từ ${voucher.voucherNumber}? Hành động này không thể hoàn tác!`)) {
-    try {
-      // Gọi hành động xóa từ store
-      await inventoryStore.deleteDocument(voucher.id);
-      
-      // Xóa thành công thì load lại dữ liệu ở đúng trang hiện tại
-      await fetchInventoryData({ 
-        ...currentFilters.value, 
-        page: pagination.value.page 
-      });
-      
-    } catch (error) {
-      console.error('Lỗi khi xóa:', error);
-      alert('Có lỗi xảy ra khi xóa chứng từ. Vui lòng kiểm tra lại!');
-    }
+  if (docType === 'INVENTORY_RECEIPT') {
+    // Chuyển sang form Nhập kho, gắn thêm ?id=... để form biết là đang Sửa
+    router.push({ name: 'InventoryReceiptCreate', query: { id: voucher.id } });
+  } 
+  else if (docType === 'INVENTORY_ISSUE') {
+    // Chuyển sang form Xuất kho
+    router.push({ name: 'InventoryIssueCreate', query: { id: voucher.id } });
+  } 
+  else if (docType === 'TRANSFER') {
+    // Chuyển sang form Chuyển kho
+    router.push({ name: 'InventoryTransferCreate', query: { id: voucher.id } });
+  } 
+  else {
+    toast.error("Không hỗ trợ chỉnh sửa định dạng chứng từ này!");
   }
 }
 
-// 6. Mở trang Thêm mới
+// ========================================================
+// 5. CHỨC NĂNG XÓA CHUẨN (CÓ MODAL + BẮT LỖI BACKEND)
+// ========================================================
+const modalConfig = ref({
+  isOpen: false,
+  title: 'Xác nhận xóa',
+  message: '',
+  confirmText: 'Xóa chứng từ',
+  confirmColorClass: 'btn-danger',
+  voucherIdToDelete: null
+});
+
+// Mở modal xác nhận thay vì dùng confirm() mặc định
+const openDeleteModal = (voucher) => {
+  modalConfig.value.voucherIdToDelete = voucher.id;
+  modalConfig.value.message = `Bạn có chắc chắn muốn xóa chứng từ số "${voucher.voucherNumber}" không? Hành động này sẽ xóa hoàn toàn dữ liệu khỏi hệ thống!`;
+  modalConfig.value.isOpen = true;
+}
+
+const closeDeleteModal = () => {
+  modalConfig.value.isOpen = false;
+  modalConfig.value.voucherIdToDelete = null;
+}
+
+// Thực thi xóa khi ấn Đồng ý trên Modal
+const executeDeleteVoucher = async () => {
+  const id = modalConfig.value.voucherIdToDelete;
+  if (!id) return;
+
+  try {
+    await inventoryStore.deleteDocument(id);
+    toast.success("Đã xóa chứng từ thành công!");
+
+    // Đóng modal và tải lại dữ liệu bảng
+    closeDeleteModal();
+    await fetchInventoryData({
+      ...currentFilters.value,
+      page: pagination.value.page
+    });
+  } catch (error) {
+    console.error('Lỗi khi xóa:', error);
+    // Bắt đúng chuỗi lỗi ném ra từ Store/Backend (Vd: Trạng thái Đã ghi sổ)
+    const errorMsg = typeof error === 'string' ? error : "Có lỗi xảy ra khi kết nối máy chủ!";
+    toast.error("" + errorMsg);
+    closeDeleteModal();
+  }
+}
+
 const createNewReceipt = () => {
   router.push({ name: 'InventoryReceiptCreate' })
 }
@@ -127,20 +193,15 @@ onMounted(async () => {
     </div>
 
     <div class="section-container data-section">
-      <InventoryFilter 
-        @search="fetchInventoryData" 
-        @export="handleExportData" 
-      />
+      <InventoryFilter @search="fetchInventoryData" @export="handleExportData" />
 
-      <InventoryTable 
-        :items="tableData" 
-        :pagination="pagination" 
-        :is-loading="isLoading" 
-        @edit="handleEditVoucher"
-        @delete="handleDeleteVoucher" 
-        @page-change="handlePageChange" 
-      />
+      <InventoryTable :items="tableData" :pagination="pagination" :is-loading="isLoading" @edit="handleEditVoucher"
+        @delete="openDeleteModal" @page-change="handlePageChange" />
     </div>
+
+    <InventoryDeleteModal :isOpen="modalConfig.isOpen" :title="modalConfig.title" :message="modalConfig.message"
+      :confirmText="modalConfig.confirmText" :confirmColorClass="modalConfig.confirmColorClass"
+      @close="closeDeleteModal" @confirm="executeDeleteVoucher" />
   </div>
 </template>
 

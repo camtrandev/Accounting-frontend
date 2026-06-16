@@ -171,6 +171,26 @@ function readVietnameseMoney(number) {
     return res + " đồng chẵn.";
 }
 
+
+const resetForm = () => {
+    voucher.value = {
+        DocumentNo: '', 
+        PartnerId: null,
+        WarehouseId: listWarehouses.value.length > 0 ? listWarehouses.value[0].id : null,
+        BuyerName: '', // Xóa tên người nhận tiền
+        DocumentDate: new Date().toISOString().substr(0, 10),
+        Reason: '',
+        ReferenceDocs: '',
+        Details: [
+            // Trả về dòng trống mặc định (Nợ 331 / Có 1111) cho Phiếu chi
+            { Description: '', DebitAcc: '331', CreditAcc: '1111', Amount: 0 }
+        ]
+    };
+    
+    // Tự động nhảy số Phiếu chi mới ngay lập tức
+    generateDocumentNo();
+};
+
 // --- 4. LOGIC LƯU DỮ LIỆU ---
 const handleSave = async () => {
     if (!voucher.value.PartnerId) return toast.warning("Vui lòng chọn đối tượng nhận tiền!");
@@ -185,7 +205,7 @@ const handleSave = async () => {
             warehouseId: voucher.value.WarehouseId ? Number(voucher.value.WarehouseId) : null,
             totalAmount: totalAmount.value,
             description: voucher.value.Reason,
-            status: 1
+            status: 0
         },
         lines: voucher.value.Details.map(line => ({
             description: line.Description || voucher.value.Reason,
@@ -199,6 +219,7 @@ const handleSave = async () => {
         const result = await vStore.createVoucher(payload);
         if (result?.success) {
             toast.success("✅ Lưu phiếu chi thành công!");
+            resetForm();
         } else {
             toast.error("❌ Lỗi: " + (result.message || "Không thể lưu"));
         }

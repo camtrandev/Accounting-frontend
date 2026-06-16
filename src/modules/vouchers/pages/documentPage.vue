@@ -18,23 +18,16 @@
         <select v-model="filters.status">
           <option value="">Tất cả trạng thái</option>
           <option value="1">Đã ghi sổ</option>
-          <option value="0">Bản nháp</option>
+          <option value="0">Đã huỷ</option>
           <option value="2">Chờ duyệt</option>
         </select>
       </div>
     </div>
 
-    <DocumentTable 
-      :documents="paginatedDocuments" 
-      @edit="handleEdit" 
-      @delete="handleDelete" 
-    />
+    <DocumentTable :documents="paginatedDocuments" @approve="handleApprove" @reject="handleReject" />
 
-    <Pagination 
-      :total-items="filteredDocuments.length" 
-      v-model:current-page="currentPage"
-      v-model:page-size="pageSize" 
-    />
+    <Pagination :total-items="filteredDocuments.length" v-model:current-page="currentPage"
+      v-model:page-size="pageSize" />
 
     <ApprovalListModal v-if="showApprovalModal" :pending-list="vStore.pendingVouchers"
       @close="showApprovalModal = false" @refresh="vStore.fetchPendingVouchers()" />
@@ -46,12 +39,13 @@ import { onMounted, computed, ref, reactive, watch } from 'vue';
 import { useAuthStore } from '../../../stores/auth.store';
 import { useVouchersStore } from '../store/vouchers.store';
 import { useToast } from "vue-toastification";
+
 import DocumentToolbar from '../components/DocumentToolbar.vue';
 import DocumentTable from '../components/DocumentTable.vue';
 import ApprovalListModal from '../components/ApprovalListModal.vue';
 import Pagination from '../components/Pagination.vue';
 
-// STATE PHÂN TRANG
+// --- STATE PHÂN TRANG ---
 const currentPage = ref(1);
 const pageSize = ref(10); // Mặc định 10 chứng từ / trang
 
@@ -101,18 +95,121 @@ const paginatedDocuments = computed(() => {
 
 onMounted(async () => {
   if (isAdmin.value) await vStore.fetchPendingVouchers();
-  await vStore.fetchAllVouchers(); 
+  await vStore.fetchAllVouchers();
 });
 
+// --- CÁC HÀM XỬ LÝ SỰ KIỆN TỪ TOOLBAR ---
 const openApprovalList = () => { showApprovalModal.value = true; };
 const handleCreateNew = () => { console.log("Mở form thêm mới"); };
+const handleExportExcel = () => { toast.success("Hệ thống đang chuẩn bị tệp Excel..."); };
+
+// --- CÁC HÀM XỬ LÝ SỰ KIỆN TỪ BẢNG (TABLE) ---
 const handleEdit = (doc) => { console.log("Sửa chứng từ:", doc); };
+
 const handleDelete = (id) => {
   if (confirm("Bạn có chắc chắn muốn xóa chứng từ này?")) {
     console.log("Đã xóa ID:", id);
+    // Tương lai có thể gọi vStore.deleteVoucher(id) ở đây
   }
 };
-const handleExportExcel = () => { toast.success("Hệ thống đang chuẩn bị tệp Excel..."); };
+
+
+// Hàm xử lý Duyệt chứng từ + Gọi API riêng để ghi sổ cái
+const handleApprove = async (docId) => {
+  try {
+    const doc = vStore.vouchers.find(d => d.id === docId);
+    if (!doc) {
+      toast.error("Không tìm thấy dữ liệu chứng từ!");
+      return;
+    }
+
+    // 1. GỌI API DUYỆT (Chỉ để đổi Status = 1 và xử lý Kho)
+    const approveResult = await vStore.approveVoucher(docId);
+    
+    if (approveResult && (approveResult.success || approveResult.isSuccess || approveResult.status === 200)) {
+      
+      // 2. TẠO DỮ LIỆU ĐỊNH KHOẢN KÉP
+      const amount = doc.totalAmount || 0;
+      const baseEntry = {
+         documentId: doc.id,
+         postingDate: doc.documentDate ? new Date(doc.documentDate).toISOString() : new Date().toISOString(),
+         partnerId: doc.partnerId || 0,
+         description: doc.description || '',
+         transactionGroupId: doc.documentNo 
+      };
+
+      const ledgerEntries = [];
+      const docType = doc.docType?.toUpperCase();
+
+      if (docType === 'PURCHASE') {
+          ledgerEntries.push({ ...baseEntry, accountId: '1561', debitAmount: amount, creditAmount: 0 }); 
+          ledgerEntries.push({ ...baseEntry, accountId: '331', debitAmount: 0, creditAmount: amount });  
+      } 
+      else if (docType === 'SALE') {
+          ledgerEntries.push({ ...baseEntry, accountId: '5111', debitAmount: 0, creditAmount: amount }); 
+      }
+      else if (docType === 'RECEIPT') {
+          ledgerEntries.push({ ...baseEntry, accountId: '1111', debitAmount: amount, creditAmount: 0 }); 
+          ledgerEntries.push({ ...baseEntry, accountId: '131', debitAmount: 0, creditAmount: amount });  
+      }
+      else if (docType === 'PAYMENT') {
+          ledgerEntries.push({ ...baseEntry, accountId: '331', debitAmount: amount, creditAmount: 0 });  
+          ledgerEntries.push({ ...baseEntry, accountId: '1111', debitAmount: 0, creditAmount: amount }); 
+      }
+      else if (docType === 'INVENTORY_RECEIPT') {
+          // Nhập kho (Nợ 1561 Hàng hoá / Có 331 Phải trả người bán)
+          ledgerEntries.push({ ...baseEntry, accountId: '1561', debitAmount: amount, creditAmount: 0 }); 
+          ledgerEntries.push({ ...baseEntry, accountId: '331', debitAmount: 0, creditAmount: amount });  
+      }
+      else if (docType === 'INVENTORY_ISSUE') {
+          // Xuất kho (Nợ 632 Giá vốn hàng bán / Có 1561 Hàng hoá)
+          ledgerEntries.push({ ...baseEntry, accountId: '632', debitAmount: amount, creditAmount: 0 }); 
+          ledgerEntries.push({ ...baseEntry, accountId: '1561', debitAmount: 0, creditAmount: amount });  
+      }
+      else if (docType === 'TRANSFER') {
+          // Chuyển kho (Nợ 1561 Kho nhận / Có 1561 Kho xuất)
+          ledgerEntries.push({ ...baseEntry, accountId: '1561', debitAmount: amount, creditAmount: 0 }); 
+          ledgerEntries.push({ ...baseEntry, accountId: '1561', debitAmount: 0, creditAmount: amount });  
+      }
+
+      // 3. GỌI API MỚI CỦA BẠN ĐỂ LƯU SỔ CÁI
+      if (ledgerEntries.length > 0) {
+          await vStore.postLedgerEntries(ledgerEntries);
+      }
+
+      toast.success("Đã duyệt chứng từ và lưu sổ cái theo API mới thành công!");
+      
+      // 4. CẬP NHẬT GIAO DIỆN
+      await vStore.fetchAllVouchers(); 
+      if (typeof isAdmin !== 'undefined' && isAdmin.value) await vStore.fetchPendingVouchers();
+      
+    } else {
+      toast.error("Lỗi khi duyệt chứng từ: " + (approveResult?.message || "Không xác định"));
+    }
+  } catch (error) {
+    console.error("Lỗi quy trình Duyệt:", error);
+    toast.error("Lỗi hệ thống khi thực thi thao tác!");
+  }
+};
+// Hàm xử lý Huỷ chứng từ
+const handleReject = async (docId) => {
+  try {
+    const result = await vStore.rejectVoucher(docId);
+
+    if (result && (result.success || result.isSuccess || result.status === 200)) {
+      toast.success("Đã huỷ chứng từ thành công!");
+
+      // Tải lại dữ liệu để cập nhật bảng sang màu Đỏ
+      await vStore.fetchAllVouchers();
+      if (isAdmin.value) await vStore.fetchPendingVouchers();
+    } else {
+      toast.error("Lỗi khi huỷ: " + (result?.message || "Không xác định"));
+    }
+  } catch (error) {
+    console.error("Lỗi khi huỷ:", error);
+    toast.error("Lỗi hệ thống khi huỷ chứng từ!");
+  }
+};
 </script>
 
 <style scoped>

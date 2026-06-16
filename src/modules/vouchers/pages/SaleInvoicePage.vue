@@ -171,6 +171,25 @@ watch(() => voucher.value.PartnerId, (newId) => {
     }
 });
 
+const resetForm = () => {
+    voucher.value = {
+        DocumentNo: generateFrontendVoucherNo('HDBH'), // Tự sinh mã mới
+        PartnerId: null,
+        WarehouseId: vStore.warehouses.length > 0 ? vStore.warehouses[0].id : null,
+        BuyerName: '', // Xóa tên người mua
+        DocumentDate: new Date().toISOString().substr(0, 10),
+        Address: '',
+        TaxCode: '',
+        Description: '',
+        TaxRate: 10,
+        TaxAmount: 0,
+        Details: [{ 
+            ItemName: '', Unit: '', Quantity: 0, UnitPrice: 0, DiscountRate: 0, Amount: 0, 
+            DebitAcc: '131', CreditAcc: '5111' // Mặc định Nợ 131 - Có 5111 cho nghiệp vụ Bán hàng
+        }]
+    };
+};
+
 const handleSave = async () => {
     // 1. Validate thông tin Header
     if (!voucher.value.PartnerId) {
@@ -235,6 +254,7 @@ const handleSave = async () => {
         if (result && result.success) {
             alert("✅ Lưu hóa đơn bán hàng thành công!");
             // Có thể thêm logic reset form hoặc chuyển về danh sách tại đây
+            resetForm();
         } else {
             // Hiển thị thông báo lỗi chi tiết (Ví dụ: "Không đủ tồn kho...")
             alert("❌ Thất bại: " + (result.message || "Không thể lưu chứng từ"));

@@ -68,22 +68,28 @@
             </td>
             <td class="text-center">
               <div class="status-wrapper">
-                <span class="status-dot" :class="item.isPosted ? 'bg-green-500' : 'bg-orange-500'"></span>
-                <span :class="item.isPosted ? 'text-green-700 font-medium' : 'text-orange-700 font-medium'">
-                  {{ item.isPosted ? 'Đã ghi sổ' : 'Chờ ghi sổ' }}
+                <span class="status-dot" :class="getStatusDotClass(getItemStatus(item))"></span>
+                <span class="font-medium" :class="getStatusTextClass(getItemStatus(item))">
+                  {{ getStatusName(getItemStatus(item)) }}
                 </span>
               </div>
             </td>
+
             <td class="sticky-col">
               <div class="actions-wrapper">
-                <button class="action-btn text-blue-600" title="Xem/Sửa" @click="emit('edit', item)">
+                <button class="action-btn text-blue-600"
+                  :class="{ 'opacity-50': getItemStatus(item) === 1 || getItemStatus(item) === 0 }" title="Xem/Sửa"
+                  @click="handleAction('edit', item)">
                   <i class="fas fa-edit"></i>
                 </button>
-                <button class="action-btn text-red-600" title="Xóa" @click="emit('delete', item)">
+                <button class="action-btn text-red-600"
+                  :class="{ 'opacity-50': getItemStatus(item) === 1 || getItemStatus(item) === 0 }" title="Xóa"
+                  @click="handleAction('delete', item)">
                   <i class="fas fa-trash-alt"></i>
                 </button>
               </div>
             </td>
+
           </tr>
         </tbody>
       </table>
@@ -113,6 +119,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useToast } from "vue-toastification" // Import Toast để hiển thị thông báo
+
+const toast = useToast()
 
 const props = defineProps({
   items: {
@@ -165,16 +174,108 @@ const formatDate = (dateString) => {
 
 const getTypeClass = (type) => {
   const normalizedType = type ? type.toLowerCase() : ''
-  const map = { receipt: 'badge-blue', issue: 'badge-orange', transfer: 'badge-green', purchase: 'badge-blue', sale: 'badge-orange' }
+  const map = { receipt: 'badge-blue', issue: 'badge-orange', transfer: 'badge-green', purchase: 'badge-blue', sale: 'badge-orange', inventory_receipt: 'badge-blue', inventory_issue: 'badge-orange' }
   return map[normalizedType] || 'badge-gray'
 }
 
 const getTypeName = (type) => {
   const normalizedType = type ? type.toLowerCase() : ''
-  const map = { receipt: 'Nhập kho', issue: 'Xuất kho', transfer: 'Chuyển kho', purchase: 'Mua hàng', sale: 'Bán hàng' }
+  const map = { receipt: 'Nhập kho', issue: 'Xuất kho', transfer: 'Chuyển kho', purchase: 'Mua hàng', sale: 'Bán hàng', inventory_receipt: 'Nhập kho', inventory_issue: 'Xuất kho' }
   return map[normalizedType] || type || 'Khác'
 }
+
+// ========================================================
+// HÀM BỌC THÉP TRẠNG THÁI
+// ========================================================
+const getItemStatus = (item) => {
+  const val = item.status !== undefined ? item.status : item.Status;
+  return val !== undefined && val !== null ? Number(val) : -1;
+}
+
+const getStatusName = (status) => {
+  if (status === 1) return 'Đã ghi sổ'
+  if (status === 2) return 'Chờ ghi sổ'
+  if (status === 0) return 'Đã huỷ'
+  return 'Không xác định'
+}
+
+const getStatusDotClass = (status) => {
+  if (status === 1) return 'bg-green-500'
+  if (status === 2) return 'bg-orange-500'
+  if (status === 0) return 'bg-red-500'
+  return 'bg-gray-400'
+}
+
+const getStatusTextClass = (status) => {
+  if (status === 1) return 'text-green-700'
+  if (status === 2) return 'text-orange-700'
+  if (status === 0) return 'text-red-700'
+  return 'text-gray-600'
+}
+
+// ========================================================
+// HÀM XỬ LÝ CLICK SỬA / XÓA (KÈM CẢNH BÁO)
+// ========================================================
+const handleAction = (action, item) => {
+  const status = getItemStatus(item);
+  const actionName = action === 'edit' ? 'sửa' : 'xóa';
+
+  if (status === 1) {
+    toast.warning(`Không thể ${actionName}. Chứng từ này đã được ghi sổ!`);
+    return;
+  }
+
+  if (status === 0) {
+    toast.warning(`Không thể ${actionName}. Chứng từ này đã bị huỷ!`);
+    return;
+  }
+
+  // Nếu hợp lệ (Status === 2 - Chờ ghi sổ), emit sự kiện để mở form sửa hoặc modal xóa
+  emit(action, item);
+}
 </script>
+
+<style scoped>
+/* Chắc chắn màu đỏ cho chữ và chấm trạng thái Huỷ */
+.bg-red-500 {
+  background-color: #ef4444 !important;
+  display: inline-block;
+}
+
+.text-red-700 {
+  color: #b91c1c !important;
+}
+
+/* Thêm thuộc tính con trỏ cảnh báo thay vì cấm hoàn toàn */
+.opacity-50 {
+  cursor: pointer;
+}
+</style>
+<style scoped>
+/* Chắc chắn màu đỏ cho chữ và chấm trạng thái Huỷ */
+.bg-red-500 {
+  background-color: #ef4444 !important;
+  display: inline-block;
+}
+
+.text-red-700 {
+  color: #b91c1c !important;
+}
+</style>
+
+
+<style scoped>
+/* Ép buộc hiển thị màu đỏ cho trạng thái Đã huỷ */
+.bg-red-500 {
+  background-color: #ef4444 !important;
+  display: inline-block;
+  /* Đảm bảo dấu chấm không bị ẩn */
+}
+
+.text-red-700 {
+  color: #b91c1c !important;
+}
+</style>
 
 <style scoped>
 .table-scroll {
