@@ -1,15 +1,12 @@
 <template>
   <div class="master-data-page">
     <div class="content-card">
-      <!-- 1. Phần Top (Cố định): Chứa Tiêu đề, Nút thêm mới, Thanh Search -->
       <div class="card-top">
         <MasterDataToolbar :current-type="currentType" @change-type="handleTypeChange" @search="handleSearch"
           @refresh="handleRefresh" @add-new="openDrawerForAdd" />
       </div>
 
-      <!-- 2. Phần Giữa (Co giãn): Chứa Table -->
       <div class="card-main">
-        <!-- Loading Overlay -->
         <div v-if="store.loading" class="loading-overlay">
           <div class="spinner"></div>
         </div>
@@ -29,21 +26,18 @@
         <WarehouseTable v-else-if="currentType === 'WAREHOUSE'" :data="store.filteredItems" @edit="openDrawerForEdit"
           @delete="handleDelete" />
 
-        <!-- Placeholder cho danh mục khác -->
         <div v-else class="empty-state">
           <i class="fas fa-tools"></i>
           <p>Chức năng {{ currentTypeLabel }} đang được cập nhật...</p>
         </div>
       </div>
 
-      <!-- 3. Phần Đáy (Cố định): Chứa Phân trang -->
       <div class="card-bottom">
         <MasterDataPagination v-if="store.filteredTotal > 0" :total="store.filteredTotal"
           :page-size="store.pagination.pageSize" v-model:current-page="store.pagination.page" />
       </div>
     </div>
 
-    <!-- Form Drawer -->
     <MasterDataDrawer v-if="isDrawerOpen" :type="currentType" :initial-data="selectedItem" @close="closeDrawer"
       @save-success="handleSaveSuccess" />
   </div>
@@ -52,6 +46,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useMasterDataStore } from '../store/masterData.store';
+import { useToast } from 'vue-toastification'; // 👉 Bổ sung thư viện Toast
 
 import MasterDataToolbar from '../components/MasterDataToolbar.vue';
 import AccountTable from '../components/tables/AccountTable.vue';
@@ -63,6 +58,8 @@ import ProductTable from '../components/tables/ProductTable.vue';
 import WarehouseTable from '../components/tables/WarehouseTable.vue';
 
 const store = useMasterDataStore();
+const toast = useToast(); // 👉 Khởi tạo Toast
+
 const currentType = ref('ACCOUNT');
 const isDrawerOpen = ref(false);
 const selectedItem = ref(null);
@@ -72,6 +69,7 @@ const currentTypeLabel = computed(() => {
     'ACCOUNT': 'Hệ thống tài khoản',
     'CUSTOMER': 'Khách hàng',
     'SUPPLIER': 'Nhà cung cấp',
+    'PRODUCT': 'Vật tư hàng hóa',
     'WAREHOUSE': 'Kho'
   };
   return labels[currentType.value] || currentType.value;
@@ -92,8 +90,7 @@ const handleTypeChange = (newType) => {
 };
 
 const handleSearch = (query) => {
-  store.filters.search = query; 
-  // Không cần loadData(); dữ liệu tự động lọc nhờ Getter
+  store.filters.search = query;
 };
 
 const handleRefresh = () => loadData();
@@ -103,10 +100,6 @@ const openDrawerForAdd = () => {
   isDrawerOpen.value = true;
 };
 
-const openDrawerForEdit = (item) => {
-  selectedItem.value = { ...item };
-  isDrawerOpen.value = true;
-};
 
 const closeDrawer = () => {
   isDrawerOpen.value = false;
@@ -118,18 +111,64 @@ const handleSaveSuccess = () => {
   loadData();
 };
 
+// ==========================================
+// HÀM MỞ FORM SỬA (ĐÃ CHẶN TÀI KHOẢN)
+// ==========================================
+const openDrawerForEdit = async (item) => {
+  // 👉 BỔ SUNG: CHẶN SỬA TÀI KHOẢN KẾ TOÁN
+  if (currentType.value === 'ACCOUNT') {
+    toast.warning("Hệ thống không cho phép chỉnh sửa Danh mục Tài khoản chuẩn!");
+    return; // Dừng hàm tại đây, không mở form nữa
+  }
+
+  const id = item.Id || item.id;
+  
+  if (!id) {
+    toast.error("Lỗi: Không xác định được ID bản ghi!");
+    return;
+  }
+
+  store.loading = true;
+  
+  try {
+    const fullData = await store.getItemById(currentType.value, id);
+    if (fullData) {
+      selectedItem.value = fullData; 
+      isDrawerOpen.value = true;
+    } else {
+      toast.error("Không thể tải thông tin chi tiết!");
+    }
+  } catch (error) {
+    toast.error("Có lỗi xảy ra khi lấy dữ liệu!");
+    console.error(error);
+  } finally {
+    store.loading = false;
+  }
+};
+
+// ==========================================
+// HÀM XÓA BẢN GHI (ĐÃ CHẶN TÀI KHOẢN)
+// ==========================================
 const handleDelete = async (id) => {
+  // 👉 BỔ SUNG: CHẶN XÓA TÀI KHOẢN KẾ TOÁN
+  if (currentType.value === 'ACCOUNT') {
+    toast.warning("Tuyệt đối không được phép xóa Tài khoản thuộc Hệ thống kế toán!");
+    return; // Dừng hàm tại đây
+  }
+
   if (confirm("Bạn có chắc chắn muốn xóa bản ghi này?")) {
     const success = await store.deleteItem(currentType.value, id);
     if (success) {
+      toast.success("Xóa danh mục thành công!");
       if (store.items.length === 1 && store.pagination.page > 1) {
         store.pagination.page--;
       }
       loadData();
+    } else {
+      toast.error("Xóa thất bại! Dữ liệu này có thể đang được sử dụng ở nơi khác.");
     }
   }
 };
-
 onMounted(loadData);
 </script>
 

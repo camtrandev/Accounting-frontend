@@ -124,6 +124,21 @@ export const useMasterDataStore = defineStore('masterData', {
     },
 
     // ==========================================
+    // BỔ SUNG: LẤY CHI TIẾT THEO ID (READ BY ID)
+    // ==========================================
+    async getItemById(type, id) {
+      try {
+        const service = this._getService(type);
+        const response = await service.getById(id);
+        // Trả về dữ liệu chi tiết bóc tách lớp bọc .data chuẩn Backend
+        return response.data?.data || response.data;
+      } catch (error) {
+        console.error(`[Store] Lỗi khi lấy chi tiết ${type}:`, error);
+        return null;
+      }
+    },
+
+    // ==========================================
     // 5. CÁC HÀM TIỆN ÍCH
     // ==========================================
     resetFilters() {

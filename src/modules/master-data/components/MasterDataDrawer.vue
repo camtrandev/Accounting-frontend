@@ -54,8 +54,51 @@ const getEmptyData = (type) => {
   }
 };
 
-// Khởi tạo dữ liệu form
-const formData = ref(props.initialData ? { ...props.initialData } : getEmptyData(props.type));
+// =========================================================================
+// 1. Hàm chuẩn hóa tránh lệch thuộc tính chữ Hoa/Thường giữa API và Form con
+// =========================================================================
+const normalizeData = (raw, type) => {
+  if (!raw) return getEmptyData(type);
+  
+  return {
+    // Định dạng ID linh hoạt
+    Id: raw.Id || raw.id,
+    
+    // Nhóm Khách hàng / Nhà cung cấp (Partners)
+    PartnerCode: raw.PartnerCode || raw.partnerCode || '',
+    PartnerName: raw.PartnerName || raw.partnerName || '',
+    TaxCode: raw.TaxCode || raw.taxCode || '',
+    Address: raw.Address || raw.address || '',
+    DebtLimit: raw.DebtLimit !== undefined ? raw.DebtLimit : (raw.debtLimit || 0),
+    PartnerType: raw.PartnerType || raw.partnerType || (type === 'CUSTOMER' ? 1 : 2),
+    
+    // Nhóm Vật tư hàng hóa (Items)
+    ItemCode: raw.ItemCode || raw.itemCode || '',
+    ItemName: raw.ItemName || raw.itemName || '',
+    ItemType: raw.ItemType || raw.itemType || 1,
+    Unit: raw.Unit || raw.unit || '',
+    CostMethod: raw.CostMethod || raw.costMethod || 1,
+    DefaultAccountStock: raw.DefaultAccountStock || raw.defaultAccountStock || '1561',
+    DefaultAccountRevenue: raw.DefaultAccountRevenue || raw.defaultAccountRevenue || '5111',
+    DefaultWarehouseId: raw.DefaultWarehouseId || raw.defaultWarehouseId || raw.default_warehouse_id || null,
+    
+    // Nhóm Kho hàng (Warehouses)
+    WarehouseCode: raw.WarehouseCode || raw.warehouseCode || raw.warehouse_code || '',
+    WarehouseName: raw.WarehouseName || raw.warehouseName || raw.warehouse_name || '',
+    ManagerName: raw.ManagerName || raw.managerName || raw.manager_name || '',
+    
+    // Trạng thái chung
+    IsActive: raw.IsActive !== undefined ? raw.IsActive : (raw.isActive !== undefined ? raw.isActive : 1)
+  };
+};
+
+// Khởi tạo dữ liệu form thông qua bộ lọc chuẩn hóa
+const formData = ref(normalizeData(props.initialData, props.type));
+
+// Theo dõi nếu dòng dữ liệu thay đổi hoặc đóng mở lại drawer
+watch(() => props.initialData, (newVal) => {
+  formData.value = normalizeData(newVal, props.type);
+}, { deep: true });
 
 // ==========================================
 // 2. Bản đồ ánh xạ giữa Type và Component Form
@@ -99,11 +142,6 @@ const handleSave = async () => {
     alert("Có lỗi hệ thống, vui lòng kiểm tra console.");
   }
 };
-
-// Theo dõi nếu đổi dòng hoặc mở lại drawer
-watch(() => props.initialData, (newVal) => {
-  formData.value = newVal ? { ...newVal } : getEmptyData(props.type);
-}, { deep: true });
 </script>
 
 <style lang="scss" scoped>
